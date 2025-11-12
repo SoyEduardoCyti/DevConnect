@@ -34,6 +34,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'GET') {
 
 function getJobs($db) {
     try {
+        // Cambio: activa = 1 en lugar de TRUE
         $query = "
             SELECT 
                 o.id,
@@ -44,13 +45,14 @@ function getJobs($db) {
                 u.nombres AS empleador_nombre,
                 u.apellidos AS empleador_apellido,
                 o.fecha_publicacion,
-                GROUP_CONCAT(DISTINCT l.nombre) AS requisitos
+                STRING_AGG(DISTINCT l.nombre, ',') AS requisitos
             FROM ofertas_trabajo o
             JOIN usuarios u ON o.empleador_id = u.id
             LEFT JOIN oferta_requisitos orq ON o.id = orq.oferta_id
             LEFT JOIN lenguajes l ON orq.lenguaje_id = l.id
-            WHERE o.activa = TRUE
-            GROUP BY o.id
+            WHERE o.activa = 1
+            GROUP BY o.id, o.titulo, o.empresa, o.descripcion, o.empleador_id, 
+                     u.nombres, u.apellidos, o.fecha_publicacion
             ORDER BY o.fecha_publicacion DESC
         ";
         
@@ -96,8 +98,9 @@ function addJob($db, $user, $data) {
     }
 
     try {
-        $query = "INSERT INTO ofertas_trabajo (titulo, empresa, descripcion, empleador_id) 
-                  VALUES (?, ?, ?, ?)";
+        // Cambio: retornar el ID usando RETURNING
+        $query = "INSERT INTO ofertas_trabajo (titulo, empresa, descripcion, empleador_id, activa) 
+                  VALUES (?, ?, ?, ?, 1) RETURNING id";
         $stmt = $db->prepare($query);
         $stmt->execute([
             $data->title,
@@ -106,7 +109,7 @@ function addJob($db, $user, $data) {
             $user['id']
         ]);
         
-        $job_id = $db->lastInsertId();
+        $job_id = $stmt->fetch(PDO::FETCH_ASSOC)['id'];
         
         if (isset($data->requirements) && is_array($data->requirements)) {
             insertJobRequirements($db, $job_id, $data->requirements);
@@ -232,8 +235,8 @@ function deleteJob($db, $user, $data) {
         $delete_stmt = $db->prepare($delete_req);
         $delete_stmt->execute([$data->jobId]);
         
-        // Marcar como inactiva
-        $query = "UPDATE ofertas_trabajo SET activa = FALSE WHERE id = ?";
+        // Marcar como inactiva (cambio: = 0 en lugar de FALSE)
+        $query = "UPDATE ofertas_trabajo SET activa = 0 WHERE id = ?";
         $stmt = $db->prepare($query);
         $stmt->execute([$data->jobId]);
         
@@ -250,22 +253,28 @@ function deleteJob($db, $user, $data) {
 
 function insertJobRequirements($db, $job_id, $requirements) {
     foreach ($requirements as $req_name) {
-        $lang_query = "SELECT id FROM lenguajes WHERE nombre = ?";
-        $lang_stmt = $db->prepare($lang_query);
-        $lang_stmt->execute([$req_name]);
-        
-        if ($lang_stmt->rowCount() > 0) {
-            $language_id = $lang_stmt->fetch(PDO::FETCH_ASSOC)['id'];
-        } else {
-            $insert_lang = "INSERT INTO lenguajes (nombre) VALUES (?)";
-            $insert_stmt = $db->prepare($insert_lang);
-            $insert_stmt->execute([$req_name]);
-            $language_id = $db->lastInsertId();
+        try {
+            $lang_query = "SELECT id FROM lenguajes WHERE nombre = ?";
+            $lang_stmt = $db->prepare($lang_query);
+            $lang_stmt->execute([$req_name]);
+            
+            if ($lang_stmt->rowCount() > 0) {
+                $language_id = $lang_stmt->fetch(PDO::FETCH_ASSOC)['id'];
+            } else {
+                $insert_lang = "INSERT INTO lenguajes (nombre) VALUES (?) RETURNING id";
+                $insert_stmt = $db->prepare($insert_lang);
+                $insert_stmt->execute([$req_name]);
+                $language_id = $insert_stmt->fetch(PDO::FETCH_ASSOC)['id'];
+            }
+            
+            $req_query = "INSERT INTO oferta_requisitos (oferta_id, lenguaje_id) 
+                         VALUES (?, ?) 
+                         ON CONFLICT DO NOTHING";
+            $req_stmt = $db->prepare($req_query);
+            $req_stmt->execute([$job_id, $language_id]);
+        } catch (PDOException $e) {
+            continue;
         }
-        
-        $req_query = "INSERT INTO oferta_requisitos (oferta_id, lenguaje_id) VALUES (?, ?)";
-        $req_stmt = $db->prepare($req_query);
-        $req_stmt->execute([$job_id, $language_id]);
     }
 }
 ?>
