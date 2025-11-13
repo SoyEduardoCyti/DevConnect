@@ -1943,10 +1943,34 @@ async function register(e){
 }
 
 async function logout(){
+   // Limpiar todas las variables globales
     currentUser = null;
     isAuthenticated = false;
+    jobs = [];
+    developers = [];
+    chats = {};
+    currentChat = null;
+    activeTab = 'myJobs';
+    selectedLanguages = [];
+    selectedAreas = [];
+    
+    // Limpiar localStorage
     localStorage.removeItem('devconnect_user');
+    
+    // Resetear la UI completamente
     showUnauthenticatedUI();
+    
+    // Resetear formularios
+    document.getElementById('loginScreen').querySelector('form').reset();
+    document.getElementById('registerScreen').querySelector('form').reset();
+    document.getElementById('addJobForm').reset();
+    
+    // Resetear pestañas activas
+    document.querySelectorAll('.tab').forEach(tab => {
+        tab.classList.remove('active');
+    });
+    document.querySelector('.tab').classList.add('active');
+
 }
 
 // Función para editar trabajo
