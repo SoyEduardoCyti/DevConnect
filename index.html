@@ -1493,9 +1493,62 @@
         </div>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     
     <script>
-        function formatDate(dateString) {
+// Configuración de Supabase
+const SUPABASE_URL = 'https://mhmlwgsrzmqtsvfofcpw.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1obWx3Z3Nyem1xdHN2Zm9mY3B3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI5NTcwNDMsImV4cCI6MjA3ODUzMzA0M30.56vXzGRxUTU3uS6qwQGJmwTGW67S1mB-jl70SQ_zejE';
+
+// Inicializar cliente de Supabase
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// Variables globales
+let currentUser = null;
+let currentSession = null;
+let jobs = [];
+let developers = [];
+let chats = {};
+let currentChat = null;
+let activeTab = 'myJobs';
+let selectedLanguages = [];
+let selectedAreas = [];
+
+// Estado de autenticación
+let isAuthenticated = false;
+
+// Inicializar la aplicación
+document.addEventListener('DOMContentLoaded', async function() {
+    // Verificar si hay una sesión activa
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) {
+        currentSession = session;
+        await loadCurrentUser();
+        isAuthenticated = true;
+        showAuthenticatedUI();
+    } else {
+        isAuthenticated = false;
+        showUnauthenticatedUI();
+    }
+});
+
+// Cargar datos del usuario actual
+async function loadCurrentUser() {
+    try {
+        const { data, error } = await supabase
+            .from('users')
+            .select('*')
+            .eq('id', currentSession.user.id)
+            .single();
+        
+        if (error) throw error;
+        currentUser = data;
+    } catch (error) {
+        console.error('Error al cargar usuario:', error);
+    }
+}
+
+function formatDate(dateString) {
     if (!dateString) return '';
     const date = new Date(dateString);
     const today = new Date();
@@ -1510,63 +1563,21 @@
         return date.toLocaleDateString('es-ES', { year: 'numeric', month: 'long', day: 'numeric' });
     }
 }
-        // Variables globales (del código original)
-        let currentUser = null;
-        let currentToken = null;
-        let jobs = [];
-        let developers = [];
-        let chats = {};
-        let currentChat = null;
-        let activeTab = 'myJobs';
-        let selectedLanguages = [];
-        let selectedAreas = [];
-        const API_BASE = window.location.origin + '/devconnect/api';
 
-        // Estado de autenticación
-        let isAuthenticated = false;
-
-        // Inicializar la aplicación
-        document.addEventListener('DOMContentLoaded', function() {
-            checkAuthentication();
-        });
-
-        // Verificar el estado de autenticación
-        function checkAuthentication() {
-            const savedToken = localStorage.getItem('devconnect_token');
-            const savedUser = localStorage.getItem('devconnect_user');
-            
-            if (savedToken && savedUser) {
-                currentToken = savedToken;
-                currentUser = JSON.parse(savedUser);
-                isAuthenticated = true;
-                showAuthenticatedUI();
-            } else {
-                isAuthenticated = false;
-                showUnauthenticatedUI();
-            }
-        }
-        // Configurar permisos según el tipo de usuario
+// Configurar permisos según el tipo de usuario
 function setupUserPermissions() {
     const isDeveloper = currentUser.type === 'desarrollador';
     const isEmployer = currentUser.type === 'empleador';
     
-    // Si es desarrollador, ocultar opciones que no debe ver
     if (isDeveloper) {
-        // Ocultar el botón de agregar oferta en el dashboard
         const addJobBtn = document.querySelector('[onclick="showAddJob()"]');
         if (addJobBtn) addJobBtn.style.display = 'none';
         
-        // Ocultar la pestaña de desarrolladores
         const tabs = document.querySelectorAll('.tab');
         tabs.forEach(tab => {
             if (tab.textContent.includes('Desarrolladores')) {
                 tab.style.display = 'none';
             }
-        });
-        
-        // Asegurarse de que solo vea "Otras Publicaciones"
-        // Renombrar "Mis Publicaciones" a "Publicaciones"
-        tabs.forEach(tab => {
             if (tab.textContent.includes('Mis Publicaciones')) {
                 tab.textContent = 'Publicaciones Disponibles';
             }
@@ -1576,7 +1587,6 @@ function setupUserPermissions() {
         });
     }
     
-    // Si es empleador, mostrar todas las opciones (comportamiento actual)
     if (isEmployer) {
         const addJobBtn = document.querySelector('[onclick="showAddJob()"]');
         if (addJobBtn) addJobBtn.style.display = '';
@@ -1586,172 +1596,129 @@ function setupUserPermissions() {
     }
 }
 
-        // Mostrar la interfaz para usuarios autenticados
-        function showAuthenticatedUI() {
-    // Ocultar todas las pantallas de no autenticados
+// Mostrar la interfaz para usuarios autenticados
+function showAuthenticatedUI() {
     document.getElementById('homeScreen').classList.add('hidden');
     document.getElementById('loginScreen').classList.add('hidden');
     document.getElementById('registerOptionsScreen').classList.add('hidden');
     document.getElementById('registerScreen').classList.add('hidden');
     
-    // Mostrar elementos de autenticados
     document.getElementById('sidebar').classList.remove('hidden');
     document.getElementById('mobileMenuBtn').classList.remove('hidden');
     
-    // Actualizar la información del usuario
     updateUserInfo();
-    
-    // Configurar permisos según el tipo de usuario
     setupUserPermissions();
-    
-    // Mostrar el dashboard por defecto
     showDashboard();
 }
-        // Mostrar la interfaz para usuarios no autenticados
-        function showUnauthenticatedUI() {
-            // Ocultar todas las pantallas de autenticados
-            document.getElementById('sidebar').classList.add('hidden');
-            document.getElementById('mobileMenuBtn').classList.add('hidden');
-            document.getElementById('dashboardScreen').classList.add('hidden');
-            document.getElementById('addJobScreen').classList.add('hidden');
-            document.getElementById('chatScreen').classList.add('hidden');
-            
-            // Mostrar la pantalla de inicio por defecto
-            document.getElementById('homeScreen').classList.remove('hidden');
-            document.getElementById('loginScreen').classList.add('hidden');
-            document.getElementById('registerOptionsScreen').classList.add('hidden');
-            document.getElementById('registerScreen').classList.add('hidden');
-            
-            // Actualizar el título de la página
-            document.getElementById('pageTitle').textContent = 'DevConnect';
-        }
 
-        // Actualizar la información del usuario en la interfaz
-        function updateUserInfo() {
-            if (currentUser) {
-                document.getElementById('userName').textContent = currentUser.firstName + ' ' + currentUser.lastName;
-                document.getElementById('userRole').textContent = currentUser.type === 'empleador' ? 'Empleador' : 'Desarrollador';
-                document.getElementById('userAvatar').textContent = currentUser.firstName.charAt(0).toUpperCase();
-                
-                document.getElementById('dashboardUserName').textContent = currentUser.firstName;
-                document.getElementById('dashboardUserRole').textContent = currentUser.type === 'empleador' ? 'Empleador' : 'Desarrollador';
-            }
-        }
+// Mostrar la interfaz para usuarios no autenticados
+function showUnauthenticatedUI() {
+    document.getElementById('sidebar').classList.add('hidden');
+    document.getElementById('mobileMenuBtn').classList.add('hidden');
+    document.getElementById('dashboardScreen').classList.add('hidden');
+    document.getElementById('addJobScreen').classList.add('hidden');
+    document.getElementById('chatScreen').classList.add('hidden');
+    
+    document.getElementById('homeScreen').classList.remove('hidden');
+    document.getElementById('loginScreen').classList.add('hidden');
+    document.getElementById('registerOptionsScreen').classList.add('hidden');
+    document.getElementById('registerScreen').classList.add('hidden');
+    
+    document.getElementById('pageTitle').textContent = 'DevConnect';
+}
 
-        // Función para hacer requests a la API (del código original)
-        async function apiCall(endpoint, options = {}) {
-            const url = `${API_BASE}/${endpoint}`;
-            const config = {
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                ...options
-            };
-            
-            if (currentToken) {
-                config.headers['Authorization'] = `Bearer ${currentToken}`;
-            }
-            
-            if (config.body && typeof config.body === 'object') {
-                config.body = JSON.stringify(config.body);
-            }
-            
-            try {
-                const response = await fetch(url, config);
-                const data = await response.json();
-                
-                if (!response.ok) {
-                    throw new Error(data.error || 'Error en la solicitud');
-                }
-                
-                return data;
-            } catch (error) {
-                console.error('API Error:', error);
-                throw error;
-            }
-        }
+// Actualizar la información del usuario en la interfaz
+function updateUserInfo() {
+    if (currentUser) {
+        document.getElementById('userName').textContent = currentUser.first_name + ' ' + currentUser.last_name;
+        document.getElementById('userRole').textContent = currentUser.type === 'empleador' ? 'Empleador' : 'Desarrollador';
+        document.getElementById('userAvatar').textContent = currentUser.first_name.charAt(0).toUpperCase();
+        
+        document.getElementById('dashboardUserName').textContent = currentUser.first_name;
+        document.getElementById('dashboardUserRole').textContent = currentUser.type === 'empleador' ? 'Empleador' : 'Desarrollador';
+    }
+}
 
-        // Función para mostrar/ocultar loading (del código original)
-        function setLoading(button, isLoading) {
-            if (isLoading) {
-                button.disabled = true;
-                button.innerHTML = '<div class="loading"></div> Procesando...';
-            } else {
-                button.disabled = false;
-                button.innerHTML = button.getAttribute('data-original-text') || button.textContent;
-            }
-        }
+// Función para mostrar/ocultar loading
+function setLoading(button, isLoading) {
+    if (isLoading) {
+        button.disabled = true;
+        button.innerHTML = '<div class="loading"></div> Procesando...';
+    } else {
+        button.disabled = false;
+        button.innerHTML = button.getAttribute('data-original-text') || button.textContent;
+    }
+}
 
-        // Función de utilidad para escape HTML (del código original)
-        function escapeHtml(text) {
-            if (!text) return '';
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
+// Función de utilidad para escape HTML
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
 
-        // Funciones de navegación para usuarios no autenticados
-        function showHome(){
-            if (isAuthenticated) {
-                showDashboard();
-                return;
-            }
-            hideAllScreens();
-            document.getElementById('homeScreen').classList.remove('hidden');
-            updatePageTitle('DevConnect');
-        }
+// Funciones de navegación para usuarios no autenticados
+function showHome(){
+    if (isAuthenticated) {
+        showDashboard();
+        return;
+    }
+    hideAllScreens();
+    document.getElementById('homeScreen').classList.remove('hidden');
+    updatePageTitle('DevConnect');
+}
 
-        function showLogin(){
-            if (isAuthenticated) {
-                showDashboard();
-                return;
-            }
-            hideAllScreens();
-            document.getElementById('loginScreen').classList.remove('hidden');
-            updatePageTitle('Iniciar Sesión');
-        }
+function showLogin(){
+    if (isAuthenticated) {
+        showDashboard();
+        return;
+    }
+    hideAllScreens();
+    document.getElementById('loginScreen').classList.remove('hidden');
+    updatePageTitle('Iniciar Sesión');
+}
 
-        function showRegisterOptions(){
-            if (isAuthenticated) {
-                showDashboard();
-                return;
-            }
-            hideAllScreens();
-            document.getElementById('registerOptionsScreen').classList.remove('hidden');
-            updatePageTitle('Tipo de Registro');
-        }
+function showRegisterOptions(){
+    if (isAuthenticated) {
+        showDashboard();
+        return;
+    }
+    hideAllScreens();
+    document.getElementById('registerOptionsScreen').classList.remove('hidden');
+    updatePageTitle('Tipo de Registro');
+}
 
-        function showRegister(type){
-            if (isAuthenticated) {
-                showDashboard();
-                return;
-            }
-            document.getElementById('registerTitle').innerText = type==='empleador'?'Registro Empleador':'Registro Desarrollador';
-            document.getElementById('employerFields').classList.toggle('hidden', type!=='empleador');
-            document.getElementById('developerFields').classList.toggle('hidden', type!=='desarrollador');
-            document.getElementById('registerForm').dataset.type = type;
-            
-            // Resetear la verificación de contraseña
-            resetPasswordValidation();
-            
-            hideAllScreens();
-            document.getElementById('registerScreen').classList.remove('hidden');
-            updatePageTitle('Registro');
-        }
+function showRegister(type){
+    if (isAuthenticated) {
+        showDashboard();
+        return;
+    }
+    document.getElementById('registerTitle').innerText = type==='empleador'?'Registro Empleador':'Registro Desarrollador';
+    document.getElementById('employerFields').classList.toggle('hidden', type!=='empleador');
+    document.getElementById('developerFields').classList.toggle('hidden', type!=='desarrollador');
+    document.getElementById('registerForm').dataset.type = type;
+    
+    resetPasswordValidation();
+    
+    hideAllScreens();
+    document.getElementById('registerScreen').classList.remove('hidden');
+    updatePageTitle('Registro');
+}
 
-        // Funciones de navegación para usuarios autenticados
-        function showDashboard(){
-            if (!isAuthenticated) {
-                showHome();
-                return;
-            }
-            
-            hideAllScreens();
-            document.getElementById('dashboardScreen').classList.remove('hidden');
-            updatePageTitle('Dashboard');
-            
-            loadContent();
-        }
+// Funciones de navegación para usuarios autenticados
+function showDashboard(){
+    if (!isAuthenticated) {
+        showHome();
+        return;
+    }
+    
+    hideAllScreens();
+    document.getElementById('dashboardScreen').classList.remove('hidden');
+    updatePageTitle('Dashboard');
+    
+    loadContent();
+}
 
 function showAddJob(){
     if (!isAuthenticated) {
@@ -1759,7 +1726,6 @@ function showAddJob(){
         return;
     }
     
-    // Resetear el formulario si no estamos editando
     if (!document.getElementById('addJobForm').dataset.isEdit) {
         document.getElementById('addJobForm').reset();
         document.querySelectorAll('.job-req').forEach(checkbox => {
@@ -1772,169 +1738,185 @@ function showAddJob(){
     updatePageTitle('Agregar Oferta');
 }
 
-        function showChats(){
-            if (!isAuthenticated) {
-                showHome();
-                return;
-            }
-            
-            hideAllScreens();
-            document.getElementById('chatScreen').classList.remove('hidden');
-            updatePageTitle('Mensajes');
-            loadChatList();
-        }
+function showChats(){
+    if (!isAuthenticated) {
+        showHome();
+        return;
+    }
+    
+    hideAllScreens();
+    document.getElementById('chatScreen').classList.remove('hidden');
+    updatePageTitle('Mensajes');
+    loadChatList();
+}
 
-        function hideAllScreens() {
-            const screens = [
-                'homeScreen', 'loginScreen', 'registerOptionsScreen', 
-                'registerScreen', 'dashboardScreen', 'addJobScreen', 'chatScreen'
-            ];
-            
-            screens.forEach(screen => {
-                document.getElementById(screen).classList.add('hidden');
-            });
-        }
+function hideAllScreens() {
+    const screens = [
+        'homeScreen', 'loginScreen', 'registerOptionsScreen', 
+        'registerScreen', 'dashboardScreen', 'addJobScreen', 'chatScreen'
+    ];
+    
+    screens.forEach(screen => {
+        document.getElementById(screen).classList.add('hidden');
+    });
+}
 
-        function updatePageTitle(title) {
-            document.getElementById('pageTitle').textContent = title;
-        }
+function updatePageTitle(title) {
+    document.getElementById('pageTitle').textContent = title;
+}
 
-        function toggleSidebar() {
-            const sidebar = document.getElementById('sidebar');
-            sidebar.classList.toggle('collapsed');
-        }
+function toggleSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    sidebar.classList.toggle('collapsed');
+}
 
-        // Función de login (del código original)
-        async function login(e){
-            e.preventDefault();
-            const username = document.getElementById('loginUsername').value;
-            const password = document.getElementById('loginPassword').value;
-            const loginButton = document.getElementById('loginButton');
-            
-            // Guardar texto original y mostrar loading
-            loginButton.setAttribute('data-original-text', loginButton.textContent);
-            setLoading(loginButton, true);
-            
-            try {
-                const result = await apiCall('auth.php', {
-                    method: 'POST',
-                    body: {
-                        action: 'login',
-                        username: username,
-                        password: password
-                    }
-                });
-                
-                if (result.success) {
-                    currentUser = result.user;
-                    currentToken = result.token;
-                    isAuthenticated = true;
-                    localStorage.setItem('devconnect_token', currentToken);
-                    localStorage.setItem('devconnect_user', JSON.stringify(currentUser));
-                    
-                    showAuthenticatedUI();
-                }
-            } catch (error) {
-                alert(error.message);
-            } finally {
-                setLoading(loginButton, false);
-            }
+// Función de login con Supabase
+async function login(e){
+    e.preventDefault();
+    const username = document.getElementById('loginUsername').value;
+    const password = document.getElementById('loginPassword').value;
+    const loginButton = document.getElementById('loginButton');
+    
+    loginButton.setAttribute('data-original-text', loginButton.textContent);
+    setLoading(loginButton, true);
+    
+    try {
+        // Buscar usuario por username
+        const { data: userData, error: userError } = await supabase
+            .from('users')
+            .select('email')
+            .eq('username', username)
+            .single();
+        
+        if (userError || !userData) {
+            throw new Error('Usuario no encontrado');
         }
+        
+        // Autenticar con email y contraseña
+        const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+            email: userData.email,
+            password: password
+        });
+        
+        if (authError) throw authError;
+        
+        currentSession = authData.session;
+        await loadCurrentUser();
+        isAuthenticated = true;
+        
+        showAuthenticatedUI();
+    } catch (error) {
+        alert(error.message);
+    } finally {
+        setLoading(loginButton, false);
+    }
+}
 
-        // Función de registro (del código original)
-        async function register(e){
-            e.preventDefault();
-            
-            if (!isPasswordValid()) {
-                alert('La contraseña no cumple con los requisitos mínimos de seguridad.');
-                return;
-            }
-            
-            if (!doPasswordsMatch()) {
-                alert('Las contraseñas no coinciden.');
-                return;
-            }
-            
-            const type = e.target.dataset.type;
-            const registerButton = document.getElementById('registerButton');
-            registerButton.setAttribute('data-original-text', registerButton.textContent);
-            setLoading(registerButton, true);
-            
-            const formData = {
-                action: 'register',
-                username: document.getElementById('regUsername').value,
-                password: document.getElementById('regPassword').value,
-                firstName: document.getElementById('regFirstName').value,
-                lastName: document.getElementById('regLastName').value,
-                birthDate: document.getElementById('regBirthDate').value,
-                type: type,
-                company: type === 'empleador' ? document.getElementById('regCompany').value : null
-            };
-            
-            if (type === 'desarrollador') {
-                formData.languages = Array.from(document.querySelectorAll('.lang-checkbox:checked')).map(i => i.value);
-                formData.areas = Array.from(document.querySelectorAll('.area-checkbox:checked')).map(i => i.value);
-            }
-            
-            try {
-                const result = await apiCall('auth.php', {
-                    method: 'POST',
-                    body: formData
-                });
-                
-                if (result.success) {
-                    currentUser = result.user;
-                    currentToken = result.token;
-                    isAuthenticated = true;
-                    localStorage.setItem('devconnect_token', currentToken);
-                    localStorage.setItem('devconnect_user', JSON.stringify(currentUser));
-                    
-                    alert('Registro exitoso');
-                    showAuthenticatedUI();
-                    
-                    // Reset registration form
-                    document.getElementById('registerForm').reset();
-                    resetPasswordValidation();
-                }
-            } catch (error) {
-                alert(error.message);
-            } finally {
-                setLoading(registerButton, false);
-            }
+// Función de registro con Supabase
+async function register(e){
+    e.preventDefault();
+    
+    if (!isPasswordValid()) {
+        alert('La contraseña no cumple con los requisitos mínimos de seguridad.');
+        return;
+    }
+    
+    if (!doPasswordsMatch()) {
+        alert('Las contraseñas no coinciden.');
+        return;
+    }
+    
+    const type = e.target.dataset.type;
+    const registerButton = document.getElementById('registerButton');
+    registerButton.setAttribute('data-original-text', registerButton.textContent);
+    setLoading(registerButton, true);
+    
+    const username = document.getElementById('regUsername').value;
+    const password = document.getElementById('regPassword').value;
+    const firstName = document.getElementById('regFirstName').value;
+    const lastName = document.getElementById('regLastName').value;
+    const birthDate = document.getElementById('regBirthDate').value;
+    
+    // Crear email usando username
+    const email = `${username}@devconnect.local`;
+    
+    try {
+        // Crear usuario en Supabase Auth
+        const { data: authData, error: authError } = await supabase.auth.signUp({
+            email: email,
+            password: password
+        });
+        
+        if (authError) throw authError;
+        
+        // Preparar datos adicionales según el tipo
+        const userData = {
+            id: authData.user.id,
+            username: username,
+            email: email,
+            first_name: firstName,
+            last_name: lastName,
+            birth_date: birthDate,
+            type: type
+        };
+        
+        if (type === 'empleador') {
+            userData.company = document.getElementById('regCompany').value;
+        } else if (type === 'desarrollador') {
+            userData.languages = Array.from(document.querySelectorAll('.lang-checkbox:checked')).map(i => i.value);
+            userData.areas = Array.from(document.querySelectorAll('.area-checkbox:checked')).map(i => i.value);
         }
+        
+        // Insertar datos del usuario en la tabla users
+        const { error: insertError } = await supabase
+            .from('users')
+            .insert([userData]);
+        
+        if (insertError) throw insertError;
+        
+        currentSession = authData.session;
+        currentUser = userData;
+        isAuthenticated = true;
+        
+        alert('Registro exitoso');
+        showAuthenticatedUI();
+        
+        document.getElementById('registerForm').reset();
+        resetPasswordValidation();
+    } catch (error) {
+        alert(error.message);
+    } finally {
+        setLoading(registerButton, false);
+    }
+}
 
-        function logout(){
-            currentUser = null;
-            currentToken = null;
-            isAuthenticated = false;
-            localStorage.removeItem('devconnect_token');
-            localStorage.removeItem('devconnect_user');
-            showUnauthenticatedUI();
-        }
+async function logout(){
+    await supabase.auth.signOut();
+    currentUser = null;
+    currentSession = null;
+    isAuthenticated = false;
+    showUnauthenticatedUI();
+}
 
-        // Función para agregar trabajo (del código original)
-        function editJob(jobId) {
+// Función para editar trabajo
+function editJob(jobId) {
     const job = jobs.find(j => j.id == jobId);
     if (!job) {
         alert('Oferta no encontrada');
         return;
     }
     
-    // Rellenar el formulario con los datos actuales
     document.getElementById('jobTitle').value = job.title;
     document.getElementById('jobCompany').value = job.company;
     document.getElementById('jobDescription').value = job.description;
     
-    // Marcar los requisitos actuales
     document.querySelectorAll('.job-req').forEach(checkbox => {
         checkbox.checked = job.requirements.includes(checkbox.value);
     });
     
-    // Cambiar el ID del formulario para saber que es edición
     document.getElementById('addJobForm').dataset.jobId = jobId;
     document.getElementById('addJobForm').dataset.isEdit = 'true';
     
-    // Cambiar el título y el botón
     document.querySelector('#addJobScreen h2').textContent = 'Editar Oferta';
     document.getElementById('addJobButtonForm').innerHTML = '<span>Guardar Cambios</span>';
     
@@ -1948,25 +1930,21 @@ async function deleteJob(jobId, jobTitle) {
     }
     
     try {
-        const result = await apiCall('jobs.php', {
-            method: 'POST',
-            body: {
-                action: 'delete',
-                jobId: jobId
-            }
-        });
+        const { error } = await supabase
+            .from('jobs')
+            .delete()
+            .eq('id', jobId);
         
-        if (result.success) {
-            alert('Oferta eliminada exitosamente');
-            loadContent();
-        }
+        if (error) throw error;
+        
+        alert('Oferta eliminada exitosamente');
+        loadContent();
     } catch (error) {
         alert('Error al eliminar: ' + error.message);
     }
 }
 
-// Actualizar la función addJob para manejar ediciones
-// Actualizar la función addJob para manejar ediciones
+// Función para agregar/editar trabajo
 async function addJob(e){
     e.preventDefault();
     const isEdit = document.getElementById('addJobForm').dataset.isEdit === 'true';
@@ -1975,42 +1953,44 @@ async function addJob(e){
     addJobButton.setAttribute('data-original-text', addJobButton.textContent);
     setLoading(addJobButton, true);
     
-    const formData = {
-        action: isEdit ? 'update' : 'add',
+    const jobData = {
         title: document.getElementById('jobTitle').value,
         company: document.getElementById('jobCompany').value,
         description: document.getElementById('jobDescription').value,
         requirements: Array.from(document.querySelectorAll('.job-req:checked')).map(i => i.value),
-        employerId: currentUser.id
+        employer_id: currentUser.id,
+        publication_date: new Date().toISOString()
     };
     
-    if (isEdit) {
-        formData.jobId = jobId;
-    }
-    
     try {
-        const result = await apiCall('jobs.php', {
-            method: 'POST',
-            body: formData
+        if (isEdit) {
+            const { error } = await supabase
+                .from('jobs')
+                .update(jobData)
+                .eq('id', jobId);
+            
+            if (error) throw error;
+            alert('Oferta actualizada exitosamente');
+        } else {
+            const { error } = await supabase
+                .from('jobs')
+                .insert([jobData]);
+            
+            if (error) throw error;
+            alert('Oferta agregada exitosamente');
+        }
+        
+        document.getElementById('addJobForm').reset();
+        document.getElementById('addJobForm').removeAttribute('data-jobId');
+        document.getElementById('addJobForm').removeAttribute('data-isEdit');
+        document.querySelector('#addJobScreen h2').textContent = 'Agregar Oferta';
+        document.getElementById('addJobButtonForm').textContent = 'Agregar';
+        
+        document.querySelectorAll('.job-req').forEach(checkbox => {
+            checkbox.checked = false;
         });
         
-        if (result.success) {
-            alert(isEdit ? 'Oferta actualizada exitosamente' : 'Oferta agregada exitosamente');
-            
-            // Resetear el formulario completamente
-            document.getElementById('addJobForm').reset();
-            document.getElementById('addJobForm').removeAttribute('data-jobId');
-            document.getElementById('addJobForm').removeAttribute('data-isEdit');
-            document.querySelector('#addJobScreen h2').textContent = 'Agregar Oferta';
-            document.getElementById('addJobButtonForm').textContent = 'Agregar';
-            
-            // Desmarcar todos los checkboxes
-            document.querySelectorAll('.job-req').forEach(checkbox => {
-                checkbox.checked = false;
-            });
-            
-            showDashboard();
-        }
+        showDashboard();
     } catch (error) {
         alert(error.message);
     } finally {
@@ -2019,24 +1999,20 @@ async function addJob(e){
 }
 
 function resetAndShowDashboard() {
-    // Resetear el formulario completamente
     document.getElementById('addJobForm').reset();
     document.getElementById('addJobForm').removeAttribute('data-jobId');
     document.getElementById('addJobForm').removeAttribute('data-isEdit');
     document.querySelector('#addJobScreen h2').textContent = 'Agregar Oferta';
     document.getElementById('addJobButtonForm').textContent = 'Agregar';
     
-    // Desmarcar todos los checkboxes
     document.querySelectorAll('.job-req').forEach(checkbox => {
         checkbox.checked = false;
     });
     
-    // Mostrar dashboard
     showDashboard();
 }
 
 function switchTab(tabName) {
-    // Si es desarrollador y intenta acceder a desarrolladores, prevenir
     if (currentUser.type === 'desarrollador' && tabName === 'developers') {
         alert('No tienes permisos para ver esta sección.');
         return;
@@ -2044,7 +2020,6 @@ function switchTab(tabName) {
     
     activeTab = tabName;
     
-    // Actualizar pestañas activas
     document.querySelectorAll('.tab').forEach(tab => {
         tab.classList.toggle('active', tab.textContent.includes(
             tabName === 'myJobs' ? 'Mis Publicaciones' : 
@@ -2052,14 +2027,12 @@ function switchTab(tabName) {
         ) || (currentUser.type === 'desarrollador' && tab.textContent.includes('Publicaciones Disponibles') && tabName === 'myJobs'));
     });
     
-    // Mostrar/ocultar filtros según la pestaña
     if (tabName === 'developers') {
         document.getElementById('developerFilters').classList.remove('hidden');
     } else {
         document.getElementById('developerFilters').classList.add('hidden');
     }
     
-    // Mostrar/ocultar contenido de pestañas
     document.getElementById('myJobsTabContent').classList.toggle('hidden', tabName !== 'myJobs');
     document.getElementById('otherJobsTabContent').classList.toggle('hidden', tabName !== 'otherJobs');
     document.getElementById('developersTabContent').classList.toggle('hidden', tabName !== 'developers');
@@ -2067,18 +2040,16 @@ function switchTab(tabName) {
     loadContent();
 }
 
-        function loadContent(){
-            if (activeTab === 'developers') {
-                // Mostrar lista de desarrolladores con filtros
-                loadDevelopers();
-            } else {
-                // Mostrar lista de trabajos
-                loadJobsToDisplay();
-            }
-        }
+function loadContent(){
+    if (activeTab === 'developers') {
+        loadDevelopers();
+    } else {
+        loadJobsToDisplay();
+    }
+}
 
-        // Función para cargar trabajos (del código original)
-        async function loadJobsToDisplay(){
+// Función para cargar trabajos
+async function loadJobsToDisplay(){
     const myJobsList = document.getElementById('myJobsList');
     const otherJobsList = document.getElementById('otherJobsList');
     
@@ -2086,21 +2057,24 @@ function switchTab(tabName) {
     otherJobsList.innerHTML = '<p>Cargando ofertas...</p>';
     
     try {
-        const result = await apiCall('jobs.php');
-        jobs = result.jobs;
+        const { data, error } = await supabase
+            .from('jobs')
+            .select('*')
+            .order('publication_date', { ascending: false });
+        
+        if (error) throw error;
+        
+        jobs = data;
         
         let jobsToShowMy = [];
         let jobsToShowOther = [];
         
-        // Si es desarrollador, mostrar TODAS las ofertas en "myJobs" (que ahora se llama "Publicaciones Disponibles")
         if (currentUser.type === 'desarrollador') {
-            jobsToShowMy = jobs; // Mostrar todas las ofertas disponibles
-        } 
-        // Si es empleador, mostrar solo sus ofertas en "Mis Publicaciones"
-        else if (activeTab === 'myJobs' && currentUser.type === 'empleador') {
-            jobsToShowMy = jobs.filter(job => job.employerId == currentUser.id);
+            jobsToShowMy = jobs;
+        } else if (activeTab === 'myJobs' && currentUser.type === 'empleador') {
+            jobsToShowMy = jobs.filter(job => job.employer_id == currentUser.id);
         } else if (activeTab === 'otherJobs') {
-            jobsToShowOther = jobs.filter(job => job.employerId != currentUser.id);
+            jobsToShowOther = jobs.filter(job => job.employer_id != currentUser.id);
         }
         
         displayJobs(myJobsList, jobsToShowMy);
@@ -2111,8 +2085,8 @@ function switchTab(tabName) {
     }
 }
 
-        // Función para mostrar trabajos en la lista (del código original)
- function displayJobs(list, jobsToShow) {
+// Función para mostrar trabajos en la lista
+function displayJobs(list, jobsToShow) {
     list.innerHTML = '';
     
     if (jobsToShow.length === 0) {
@@ -2126,16 +2100,13 @@ function switchTab(tabName) {
         
         const titleHtml = `<div class="job-title">${escapeHtml(job.title)}</div>`;
         const companyHtml = `<div class="job-company">${escapeHtml(job.company)}</div>`;
-        const dateHtml = `<div class="job-date" style="font-size: 0.85rem; color: var(--gray-500); margin-bottom: 0.5rem;">${formatDate(job.publicationDate)}</div>`;
+        const dateHtml = `<div class="job-date" style="font-size: 0.85rem; color: var(--gray-500); margin-bottom: 0.5rem;">${formatDate(job.publication_date)}</div>`;
         const descHtml = `<div class="job-description">${escapeHtml(job.description)}</div>`;
         const reqHtml = `<div class="job-tags">${job.requirements.map(r => `<span class="tag primary">${escapeHtml(r)}</span>`).join('')}</div>`;
 
         let actionBtnsHtml = '';
         
-        console.log('Comparando:', currentUser.id, '==', job.employerId, 'Tipo:', currentUser.type);
-        
-        // Si es empleador Y es su propia publicación
-        if (currentUser.type === 'empleador' && parseInt(currentUser.id) === parseInt(job.employerId)) {
+        if (currentUser.type === 'empleador' && currentUser.id === job.employer_id) {
             actionBtnsHtml = `
                 <div class="job-actions">
                     <button class="btn btn-primary btn-sm" onclick="editJob(${job.id})">
@@ -2148,12 +2119,10 @@ function switchTab(tabName) {
                     </button>
                 </div>
             `;
-        } 
-        // Si es desarrollador
-        else if (currentUser.type === 'desarrollador') {
+        } else if (currentUser.type === 'desarrollador') {
             actionBtnsHtml = `
                 <div class="job-actions">
-                    <button class="btn btn-secondary btn-sm" onclick="openChat(${job.id}, ${job.employerId}, '${escapeHtml(job.title)}')">
+                    <button class="btn btn-secondary btn-sm" onclick="openChat(${job.id}, '${job.employer_id}', '${escapeHtml(job.title)}')">
                         <i class="fas fa-comments"></i>
                         <span>Contactar</span>
                     </button>
@@ -2176,356 +2145,393 @@ function switchTab(tabName) {
         list.appendChild(card);
     });
 }
+
+// Función para cargar desarrolladores
+async function loadDevelopers() {
+    const list = document.getElementById('developersList');
+    list.innerHTML = '<p>Cargando desarrolladores...</p>';
+    
+    try {
+        let query = supabase
+            .from('users')
+            .select('*')
+            .eq('type', 'desarrollador');
+        
+        if (selectedLanguages.length > 0) {
+            query = query.contains('languages', selectedLanguages);
+        }
+        
+        if (selectedAreas.length > 0) {
+            query = query.contains('areas', selectedAreas);
+        }
+        
+        const { data, error } = await query;
+        
+        if (error) throw error;
+        
+        developers = data;
+        displayDevelopers(list, developers);
+    } catch (error) {
+        list.innerHTML = `<p>Error al cargar desarrolladores: ${error.message}</p>`;
+    }
+}
+
+// Función para mostrar desarrolladores en la lista
+function displayDevelopers(list, developersToShow) {
+    list.innerHTML = '';
+    
+    if (developersToShow.length === 0) {
+        list.innerHTML = '<div class="card text-center" style="grid-column: 1 / -1; padding: 2rem;"><p>No se encontraron desarrolladores que coincidan con los filtros.</p></div>';
+        return;
+    }
+    
+    developersToShow.forEach(dev => {
+        const card = document.createElement('div');
+        card.className = 'developer-card card';
+        
+        const nameHtml = `<div class="developer-name">${escapeHtml(dev.first_name)} ${escapeHtml(dev.last_name)}</div>`;
+        const languagesHtml = `<div class="developer-skills">${(dev.languages || []).map(lang => `<span class="tag primary">${escapeHtml(lang)}</span>`).join('')}</div>`;
+        const areasHtml = `<div class="developer-skills">${(dev.areas || []).map(area => `<span class="tag">${escapeHtml(area)}</span>`).join('')}</div>`;
+        
+        const contactBtn = `<button class="btn btn-secondary btn-sm" onclick="contactDeveloper('${dev.id}')">
+            <i class="fas fa-comments"></i>
+            <span>Contactar</span>
+        </button>`;
+        
         card.innerHTML = `
-            <div class="job-header">
+            <div class="developer-header">
                 <div>
-                    ${titleHtml}
-                    ${companyHtml}
+                    ${nameHtml}
                 </div>
             </div>
-            ${descHtml}
-            ${reqHtml}
-            ${actionBtnsHtml}
+            ${languagesHtml}
+            ${areasHtml}
+            <div class="developer-actions">
+                ${contactBtn}
+            </div>
         `;
         list.appendChild(card);
+    });
+}
 
-        // Función para cargar desarrolladores (del código original)
-        async function loadDevelopers() {
-            const list = document.getElementById('developersList');
-            list.innerHTML = '<p>Cargando desarrolladores...</p>';
-            
-            try {
-                const params = new URLSearchParams();
-                if (selectedLanguages.length > 0) {
-                    params.append('languages', selectedLanguages.join(','));
-                }
-                if (selectedAreas.length > 0) {
-                    params.append('areas', selectedAreas.join(','));
-                }
-                
-                const result = await apiCall(`developers.php?${params}`);
-                developers = result.developers;
-                displayDevelopers(list, developers);
-            } catch (error) {
-                list.innerHTML = `<p>Error al cargar desarrolladores: ${error.message}</p>`;
-            }
+function contactDeveloper(devId) {
+    const chatJob = {
+        id: 'contact_' + Date.now(),
+        title: 'Contacto directo',
+        company: currentUser.company || 'Sin empresa especificada',
+        employer_id: currentUser.id
+    };
+    
+    openChat(chatJob.id, devId, 'Contacto directo');
+}
+
+// Funciones para la verificación de contraseña
+function togglePasswordVisibility(inputId) {
+    const input = document.getElementById(inputId);
+    const button = input.parentNode.querySelector('.toggle-password');
+    
+    if (input.type === 'password') {
+        input.type = 'text';
+        button.innerHTML = '<i class="fas fa-eye-slash"></i>';
+    } else {
+        input.type = 'password';
+        button.innerHTML = '<i class="fas fa-eye"></i>';
+    }
+}
+
+function checkPasswordStrength() {
+    const password = document.getElementById('regPassword').value;
+    const strengthBar = document.querySelector('.password-strength');
+    const requirements = {
+        length: password.length >= 8,
+        uppercase: /[A-Z]/.test(password),
+        lowercase: /[a-z]/.test(password),
+        number: /\d/.test(password),
+        symbol: /[!@#$%^&*]/.test(password)
+    };
+    
+    for (const req in requirements) {
+        const element = document.getElementById(`req-${req}`);
+        if (requirements[req]) {
+            element.classList.remove('invalid');
+            element.classList.add('valid');
+        } else {
+            element.classList.remove('valid');
+            element.classList.add('invalid');
         }
+    }
+    
+    let strength = 0;
+    for (const req in requirements) {
+        if (requirements[req]) strength++;
+    }
+    
+    strengthBar.classList.remove('weak', 'medium', 'strong');
+    if (strength <= 2) {
+        strengthBar.classList.add('weak');
+    } else if (strength <= 4) {
+        strengthBar.classList.add('medium');
+    } else {
+        strengthBar.classList.add('strong');
+    }
+    
+    checkPasswordMatch();
+}
 
-        // Función para mostrar desarrolladores en la lista (del código original)
-        function displayDevelopers(list, developersToShow) {
-            list.innerHTML = '';
-            
-            if (developersToShow.length === 0) {
-                list.innerHTML = '<div class="card text-center" style="grid-column: 1 / -1; padding: 2rem;"><p>No se encontraron desarrolladores que coincidan con los filtros.</p></div>';
-                return;
-            }
-            
-            developersToShow.forEach(dev => {
-                const card = document.createElement('div');
-                card.className = 'developer-card card';
-                
-                const nameHtml = `<div class="developer-name">${escapeHtml(dev.firstName)} ${escapeHtml(dev.lastName)}</div>`;
-                const languagesHtml = `<div class="developer-skills">${dev.languages.map(lang => `<span class="tag primary">${escapeHtml(lang)}</span>`).join('')}</div>`;
-                const areasHtml = `<div class="developer-skills">${dev.areas.map(area => `<span class="tag">${escapeHtml(area)}</span>`).join('')}</div>`;
-                
-                // Botón para contactar (iniciar chat)
-                const contactBtn = `<button class="btn btn-secondary btn-sm" onclick="contactDeveloper(${dev.id})">
-                    <i class="fas fa-comments"></i>
-                    <span>Contactar</span>
-                </button>`;
-                
-                card.innerHTML = `
-                    <div class="developer-header">
-                        <div>
-                            ${nameHtml}
-                        </div>
-                    </div>
-                    ${languagesHtml}
-                    ${areasHtml}
-                    <div class="developer-actions">
-                        ${contactBtn}
-                    </div>
-                `;
-                list.appendChild(card);
-            });
+function checkPasswordMatch() {
+    const password = document.getElementById('regPassword').value;
+    const confirmPassword = document.getElementById('regConfirmPassword').value;
+    const matchElement = document.getElementById('password-match');
+    
+    if (confirmPassword.length === 0) {
+        matchElement.textContent = 'Confirma tu contraseña';
+        matchElement.classList.remove('valid', 'invalid');
+        return false;
+    }
+    
+    if (password === confirmPassword && password.length > 0) {
+        matchElement.textContent = 'Las contraseñas coinciden';
+        matchElement.classList.remove('invalid');
+        matchElement.classList.add('valid');
+        return true;
+    } else {
+        matchElement.textContent = 'Las contraseñas no coinciden';
+        matchElement.classList.remove('valid');
+        matchElement.classList.add('invalid');
+        return false;
+    }
+}
+
+function isPasswordValid() {
+    const password = document.getElementById('regPassword').value;
+    const requirements = {
+        length: password.length >= 8,
+        uppercase: /[A-Z]/.test(password),
+        lowercase: /[a-z]/.test(password),
+        number: /\d/.test(password),
+        symbol: /[!@#$%^&*]/.test(password)
+    };
+    
+    for (const req in requirements) {
+        if (!requirements[req]) return false;
+    }
+    
+    return true;
+}
+
+function doPasswordsMatch() {
+    const password = document.getElementById('regPassword').value;
+    const confirmPassword = document.getElementById('regConfirmPassword').value;
+    
+    return password === confirmPassword && password.length > 0;
+}  
+
+function resetPasswordValidation() {
+    // Resetear todos los indicadores
+    document.querySelectorAll('.requirement').forEach(el => {
+        el.classList.remove('valid');
+        el.classList.add('invalid');
+    });
+    
+    document.querySelector('.password-strength').classList.remove('weak', 'medium', 'strong');
+    document.getElementById('password-match').classList.remove('valid');
+    document.getElementById('password-match').classList.add('invalid');
+    document.getElementById('password-match').textContent = 'Las contraseñas deben coincidir';
+}
+
+// Funciones para filtros
+function toggleFilter(filterType) {
+    const filter = document.getElementById(filterType + 'Filter');
+    const allFilters = document.querySelectorAll('.filter-options');
+    
+    allFilters.forEach(f => {
+        if (f !== filter) f.classList.remove('show');
+    });
+    
+    filter.classList.toggle('show');
+}
+
+function toggleLanguage(language) {
+    const index = selectedLanguages.indexOf(language);
+    if (index === -1) {
+        selectedLanguages.push(language);
+    } else {
+        selectedLanguages.splice(index, 1);
+    }
+    
+    updateFilterDisplay();
+    loadDevelopers();
+}
+
+function toggleArea(area) {
+    const index = selectedAreas.indexOf(area);
+    if (index === -1) {
+        selectedAreas.push(area);
+    } else {
+        selectedAreas.splice(index, 1);
+    }
+    
+    updateFilterDisplay();
+    loadDevelopers();
+}
+
+function updateFilterDisplay() {
+    const languageOptions = document.querySelectorAll('#languagesFilter .filter-option');
+    const areaOptions = document.querySelectorAll('#areasFilter .filter-option');
+    
+    languageOptions.forEach(option => {
+        if (selectedLanguages.includes(option.textContent)) {
+            option.classList.add('selected');
+        } else {
+            option.classList.remove('selected');
         }
-
-        function contactDeveloper(devId) {
-            // Crear una oferta ficticia para el chat
-            const chatJob = {
-                id: 'contact_' + Date.now(),
-                title: 'Contacto directo',
-                company: currentUser.company || 'Sin empresa especificada',
-                employerId: currentUser.id
-            };
-            
-            openChat(chatJob.id, devId, 'Contacto directo');
+    });
+    
+    areaOptions.forEach(option => {
+        if (selectedAreas.includes(option.textContent)) {
+            option.classList.add('selected');
+        } else {
+            option.classList.remove('selected');
         }
+    });
+}
 
-        // Funciones para la verificación de contraseña (del código original)
-        function togglePasswordVisibility(inputId) {
-            const input = document.getElementById(inputId);
-            const button = input.parentNode.querySelector('.toggle-password');
-            
-            if (input.type === 'password') {
-                input.type = 'text';
-                button.innerHTML = '<i class="fas fa-eye-slash"></i>';
-            } else {
-                input.type = 'password';
-                button.innerHTML = '<i class="fas fa-eye"></i>';
-            }
-        }
+function clearFilters() {
+    selectedLanguages = [];
+    selectedAreas = [];
+    updateFilterDisplay();
+    loadDevelopers();
+}
 
-        function checkPasswordStrength() {
-            const password = document.getElementById('regPassword').value;
-            const strengthBar = document.querySelector('.password-strength');
-            const requirements = {
-                length: password.length >= 8,
-                uppercase: /[A-Z]/.test(password),
-                lowercase: /[a-z]/.test(password),
-                number: /\d/.test(password),
-                symbol: /[!@#$%^&*]/.test(password)
-            };
-            
-            // Actualizar los indicadores de requisitos
-            for (const req in requirements) {
-                const element = document.getElementById(`req-${req}`);
-                if (requirements[req]) {
-                    element.classList.remove('invalid');
-                    element.classList.add('valid');
-                } else {
-                    element.classList.remove('valid');
-                    element.classList.add('invalid');
-                }
-            }
-            
-            // Calcular la fuerza de la contraseña
-            let strength = 0;
-            for (const req in requirements) {
-                if (requirements[req]) strength++;
-            }
-            
-            // Actualizar la barra de fuerza
-            strengthBar.classList.remove('weak', 'medium', 'strong');
-            if (strength <= 2) {
-                strengthBar.classList.add('weak');
-            } else if (strength <= 4) {
-                strengthBar.classList.add('medium');
-            } else {
-                strengthBar.classList.add('strong');
-            }
-            
-            // Verificar también la coincidencia de contraseñas
-            checkPasswordMatch();
-        }
-
-        function checkPasswordMatch() {
-            const password = document.getElementById('regPassword').value;
-            const confirmPassword = document.getElementById('regConfirmPassword').value;
-            const matchElement = document.getElementById('password-match');
-            
-            if (confirmPassword.length === 0) {
-                matchElement.textContent = 'Confirma tu contraseña';
-                matchElement.classList.remove('valid', 'invalid');
-                return false;
-            }
-            
-            if (password === confirmPassword && password.length > 0) {
-                matchElement.textContent = 'Las contraseñas coinciden';
-                matchElement.classList.remove('invalid');
-                matchElement.classList.add('valid');
-                return true;
-            } else {
-                matchElement.textContent = 'Las contraseñas no coinciden';
-                matchElement.classList.remove('valid');
-                matchElement.classList.add('invalid');
-                return false;
-            }
-        }
-
-        function isPasswordValid() {
-            const password = document.getElementById('regPassword').value;
-            const requirements = {
-                length: password.length >= 8,
-                uppercase: /[A-Z]/.test(password),
-                lowercase: /[a-z]/.test(password),
-                number: /\d/.test(password),
-                symbol: /[!@#$%^&*]/.test(password)
-            };
-            
-            for (const req in requirements) {
-                if (!requirements[req]) return false;
-            }
-            
-            return true;
-        }
-
-        function doPasswordsMatch() {
-            const password = document.getElementById('regPassword').value;
-            const confirmPassword = document.getElementById('regConfirmPassword').value;
-            
-            return password === confirmPassword && password.length > 0;
-        }  
-
-        function resetPasswordValidation() {
-            // Resetear todos los indicadores
-            document.querySelectorAll('.requirement').forEach(el => {
-                el.classList.remove('valid');
-                el.classList.add('invalid');
-            });
-            
-            document.querySelector('.password-strength').classList.remove('weak', 'medium', 'strong');
-            document.getElementById('password-match').classList.remove('valid');
-            document.getElementById('password-match').classList.add('invalid');
-            document.getElementById('password-match').textContent = 'Las contraseñas deben coincidir';
-        }
-
-        // Funciones para filtros (del código original)
-        function toggleFilter(filterType) {
-            const filter = document.getElementById(filterType + 'Filter');
-            const allFilters = document.querySelectorAll('.filter-options');
-            
-            allFilters.forEach(f => {
-                if (f !== filter) f.classList.remove('show');
-            });
-            
-            filter.classList.toggle('show');
-        }
-
-        function toggleLanguage(language) {
-            const index = selectedLanguages.indexOf(language);
-            if (index === -1) {
-                selectedLanguages.push(language);
-            } else {
-                selectedLanguages.splice(index, 1);
-            }
-            
-            updateFilterDisplay();
-            loadDevelopers();
-        }
-
-        function toggleArea(area) {
-            const index = selectedAreas.indexOf(area);
-            if (index === -1) {
-                selectedAreas.push(area);
-            } else {
-                selectedAreas.splice(index, 1);
-            }
-            
-            updateFilterDisplay();
-            loadDevelopers();
-        }
-
-        function updateFilterDisplay() {
-            // Actualizar visualización de filtros activos
-            const languageOptions = document.querySelectorAll('#languagesFilter .filter-option');
-            const areaOptions = document.querySelectorAll('#areasFilter .filter-option');
-            
-            languageOptions.forEach(option => {
-                if (selectedLanguages.includes(option.textContent)) {
-                    option.classList.add('selected');
-                } else {
-                    option.classList.remove('selected');
-                }
-            });
-            
-            areaOptions.forEach(option => {
-                if (selectedAreas.includes(option.textContent)) {
-                    option.classList.add('selected');
-                } else {
-                    option.classList.remove('selected');
-                }
-            });
-        }
-
-        function clearFilters() {
-            selectedLanguages = [];
-            selectedAreas = [];
-            updateFilterDisplay();
-            loadDevelopers();
-        }
-
-        // Funciones de chat (del código original)
-        async function loadChatList(){
-            const chatList = document.getElementById('chatList');
-            chatList.innerHTML = '<p>Cargando conversaciones...</p>';
-            
-            try {
-                const result = await apiCall('chats.php?action=conversations');
-                
-                if (result.conversations && result.conversations.length > 0) {
-                    displayChatList(chatList, result.conversations);
-                } else {
-                    chatList.innerHTML = '<p>No tienes conversaciones activas.</p>';
-                }
-            } catch (error) {
-                chatList.innerHTML = `<p>Error al cargar conversaciones: ${error.message}</p>`;
-            }
-        }
-
-        function displayChatList(chatList, conversations) {
-            chatList.innerHTML = '';
-            
-            conversations.forEach(chat => {
-                const chatItem = document.createElement('div');
-                chatItem.className = 'chat-item';
-                if (currentChat && currentChat.id === chat.id) {
-                    chatItem.classList.add('active');
-                }
-                
-                const lastMsg = chat.lastMessage ? 
-                    (chat.lastMessage.length > 30 ? 
-                        chat.lastMessage.substring(0, 30) + '...' : 
-                        chat.lastMessage) : 
-                    'No hay mensajes aún';
-                
-                const time = chat.lastMessageDate ? formatTime(chat.lastMessageDate) : '';
-                
-                chatItem.innerHTML = `
-                    <div class="chat-title">${escapeHtml(chat.jobTitle)} - ${escapeHtml(chat.otherUserName)}</div>
-                    <div class="chat-preview">${escapeHtml(lastMsg)}</div>
-                    <div class="chat-time">${time}</div>
-                `;
-                
-                chatItem.onclick = () => {
-                    currentChat = chat;
-                    loadChatList();
-                    loadChatMessages();
-                    
-                    document.getElementById('currentChatTitle').innerText = 
-                        `Chat: ${chat.jobTitle} - ${chat.otherUserName}`;
+// Funciones de chat
+async function loadChatList(){
+    const chatList = document.getElementById('chatList');
+    chatList.innerHTML = '<p>Cargando conversaciones...</p>';
+    
+    try {
+        // Obtener conversaciones donde el usuario actual participa
+        const { data: conversations, error } = await supabase
+            .from('conversations')
+            .select(`
+                *,
+                jobs:job_id(title),
+                sender:user1_id(first_name, last_name, username),
+                receiver:user2_id(first_name, last_name, username)
+            `)
+            .or(`user1_id.eq.${currentUser.id},user2_id.eq.${currentUser.id}`)
+            .order('last_message_date', { ascending: false });
+        
+        if (error) throw error;
+        
+        if (conversations && conversations.length > 0) {
+            // Formatear conversaciones para mostrar
+            const formattedConvs = conversations.map(conv => {
+                const otherUser = conv.user1_id === currentUser.id ? conv.receiver : conv.sender;
+                return {
+                    id: conv.id,
+                    jobTitle: conv.jobs?.title || 'Chat directo',
+                    otherUserName: `${otherUser.first_name} ${otherUser.last_name}`,
+                    otherUserId: conv.user1_id === currentUser.id ? conv.user2_id : conv.user1_id,
+                    lastMessage: conv.last_message,
+                    lastMessageDate: conv.last_message_date
                 };
-                
-                chatList.appendChild(chatItem);
             });
-        }
-
-        async function loadChatMessages(){
-            const div = document.getElementById('chatMessages');
-            div.innerHTML = '<p>Cargando mensajes...</p>';
             
-            if (!currentChat) {
-                div.innerHTML = '<p>Selecciona una conversación para ver los mensajes.</p>';
-                return;
+            displayChatList(chatList, formattedConvs);
+        } else {
+            chatList.innerHTML = '<p>No tienes conversaciones activas.</p>';
+        }
+    } catch (error) {
+        chatList.innerHTML = `<p>Error al cargar conversaciones: ${error.message}</p>`;
+    }
+}
+
+function displayChatList(chatList, conversations) {
+    chatList.innerHTML = '';
+    
+    conversations.forEach(chat => {
+        const chatItem = document.createElement('div');
+        chatItem.className = 'chat-item';
+        if (currentChat && currentChat.id === chat.id) {
+            chatItem.classList.add('active');
+        }
+        
+        const lastMsg = chat.lastMessage ? 
+            (chat.lastMessage.length > 30 ? 
+                chat.lastMessage.substring(0, 30) + '...' : 
+                chat.lastMessage) : 
+            'No hay mensajes aún';
+        
+        const time = chat.lastMessageDate ? formatTime(chat.lastMessageDate) : '';
+        
+        chatItem.innerHTML = `
+            <div class="chat-title">${escapeHtml(chat.jobTitle)} - ${escapeHtml(chat.otherUserName)}</div>
+            <div class="chat-preview">${escapeHtml(lastMsg)}</div>
+            <div class="chat-time">${time}</div>
+        `;
+        
+        chatItem.onclick = () => {
+            currentChat = chat;
+            loadChatList();
+            loadChatMessages();
+            
+            document.getElementById('currentChatTitle').innerText = 
+                `Chat: ${chat.jobTitle} - ${chat.otherUserName}`;
+        };
+        
+        chatList.appendChild(chatItem);
+    });
+}
+
+async function loadChatMessages(){
+    const div = document.getElementById('chatMessages');
+    div.innerHTML = '<p>Cargando mensajes...</p>';
+    
+    if (!currentChat) {
+        div.innerHTML = '<p>Selecciona una conversación para ver los mensajes.</p>';
+        return;
+    }
+    
+    try {
+        const { data: messages, error } = await supabase
+            .from('messages')
+            .select('*')
+            .eq('conversation_id', currentChat.id)
+            .order('timestamp', { ascending: true });
+        
+        if (error) throw error;
+        
+        // Agrupar mensajes por fecha
+        const groupedMessages = [];
+        let lastDate = null;
+        
+        messages.forEach(msg => {
+            const msgDate = new Date(msg.timestamp).toLocaleDateString('es-ES');
+            
+            if (msgDate !== lastDate) {
+                groupedMessages.push({
+                    type: 'date_separator',
+                    dateFormatted: formatDate(msg.timestamp)
+                });
+                lastDate = msgDate;
             }
             
-            try {
-                const result = await apiCall(`chats.php?action=messages&conversation_id=${currentChat.id}`);
-                displayMessages(div, result.messages);
-            } catch (error) {
-                div.innerHTML = `<p>Error al cargar mensajes: ${error.message}</p>`;
-            }
-        }
+            groupedMessages.push(msg);
+        });
+        
+        displayMessages(div, groupedMessages);
+    } catch (error) {
+        div.innerHTML = `<p>Error al cargar mensajes: ${error.message}</p>`;
+    }
+}
 
-     function displayMessages(div, messages) {
+function displayMessages(div, messages) {
     div.innerHTML = '';
     
     if (!messages || messages.length === 0) {
         div.innerHTML = '<p>No hay mensajes en esta conversación.</p>';
         return;
     }
-    
-    let lastDate = null;
     
     messages.forEach(msg => {
         // Si es un separador de fecha, procesarlo
@@ -2539,7 +2545,7 @@ function switchTab(tabName) {
         
         // Procesar mensaje normal
         const msgContainer = document.createElement('div');
-        msgContainer.className = `message ${msg.senderId == currentUser.id ? 'user' : 'other'}`;
+        msgContainer.className = `message ${msg.sender_id == currentUser.id ? 'user' : 'other'}`;
         
         const contentDiv = document.createElement('div');
         contentDiv.className = 'message-content';
@@ -2566,87 +2572,125 @@ function formatMessageTime(timestamp) {
     const ampm = hours >= 12 ? 'PM' : 'AM';
     
     hours = hours % 12;
-    hours = hours ? hours : 12; // Si es 0, cambiar a 12
+    hours = hours ? hours : 12;
     
     minutes = minutes < 10 ? '0' + minutes : minutes;
     hours = hours < 10 ? '0' + hours : hours;
     
     return `${hours}:${minutes} ${ampm}`;
 }
-        async function sendMessage(){
-            if (!currentChat) {
-                alert('Selecciona una conversación primero.');
-                return;
-            }
-            
-            const input = document.getElementById('chatInput');
-            const messageText = input.value.trim();
-            
-            if(!messageText) return;
-            
-            try {
-                await apiCall('chats.php', {
-                    method: 'POST',
-                    body: {
-                        action: 'send',
-                        conversation_id: currentChat.id,
-                        message: messageText
-                    }
-                });
-                
-                input.value = '';
-                loadChatMessages();
-                loadChatList();
-            } catch (error) {
-                alert('Error al enviar mensaje: ' + error.message);
-            }
-        }
 
-        async function openChat(jobId, otherUserId, jobTitle){
-            try {
-                // Primero crear o obtener la conversación
-                const result = await apiCall('chats.php', {
-                    method: 'POST',
-                    body: {
-                        action: 'create',
-                        job_id: jobId,
-                        other_user_id: otherUserId
-                    }
-                });
-                
-                currentChat = {
-                    id: result.conversation_id,
-                    jobTitle: jobTitle,
-                    otherUserId: otherUserId
-                };
-                
-                showChats();
-                
-                // Obtener información del otro usuario para mostrar en el título
-                const otherUserInfo = developers.find(d => d.id == otherUserId) || 
-                                     { firstName: 'Usuario', lastName: otherUserId };
-                const displayName = `${otherUserInfo.firstName} ${otherUserInfo.lastName}`;
-                
-                document.getElementById('currentChatTitle').innerText = `Chat: ${jobTitle} - ${displayName}`;
-                loadChatMessages();
-            } catch (error) {
-                alert('Error al abrir chat: ' + error.message);
-            }
-        }
+async function sendMessage(){
+    if (!currentChat) {
+        alert('Selecciona una conversación primero.');
+        return;
+    }
+    
+    const input = document.getElementById('chatInput');
+    const messageText = input.value.trim();
+    
+    if(!messageText) return;
+    
+    try {
+        const { error: msgError } = await supabase
+            .from('messages')
+            .insert([{
+                conversation_id: currentChat.id,
+                sender_id: currentUser.id,
+                message: messageText,
+                timestamp: new Date().toISOString()
+            }]);
+        
+        if (msgError) throw msgError;
+        
+        // Actualizar la última fecha de mensaje en la conversación
+        const { error: convError } = await supabase
+            .from('conversations')
+            .update({
+                last_message: messageText,
+                last_message_date: new Date().toISOString()
+            })
+            .eq('id', currentChat.id);
+        
+        if (convError) throw convError;
+        
+        input.value = '';
+        loadChatMessages();
+        loadChatList();
+    } catch (error) {
+        alert('Error al enviar mensaje: ' + error.message);
+    }
+}
 
-        function formatTime(timestamp) {
-            const date = new Date(timestamp);
-            return date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+async function openChat(jobId, otherUserId, jobTitle){
+    try {
+        // Verificar si ya existe una conversación
+        const { data: existingConv, error: searchError } = await supabase
+            .from('conversations')
+            .select('*')
+            .eq('job_id', jobId)
+            .or(`and(user1_id.eq.${currentUser.id},user2_id.eq.${otherUserId}),and(user1_id.eq.${otherUserId},user2_id.eq.${currentUser.id})`)
+            .single();
+        
+        let conversationId;
+        
+        if (existingConv) {
+            conversationId = existingConv.id;
+        } else {
+            // Crear nueva conversación
+            const { data: newConv, error: createError } = await supabase
+                .from('conversations')
+                .insert([{
+                    job_id: jobId,
+                    user1_id: currentUser.id,
+                    user2_id: otherUserId,
+                    created_at: new Date().toISOString()
+                }])
+                .select()
+                .single();
+            
+            if (createError) throw createError;
+            conversationId = newConv.id;
         }
+        
+        // Obtener información del otro usuario
+        const { data: otherUser, error: userError } = await supabase
+            .from('users')
+            .select('first_name, last_name')
+            .eq('id', otherUserId)
+            .single();
+        
+        if (userError) throw userError;
+        
+        currentChat = {
+            id: conversationId,
+            jobTitle: jobTitle,
+            otherUserId: otherUserId,
+            otherUserName: `${otherUser.first_name} ${otherUser.last_name}`
+        };
+        
+        showChats();
+        
+        document.getElementById('currentChatTitle').innerText = `Chat: ${jobTitle} - ${currentChat.otherUserName}`;
+        loadChatMessages();
+    } catch (error) {
+        alert('Error al abrir chat: ' + error.message);
+    }
+}
 
-        // Cerrar filtros al hacer clic fuera de ellos
-        document.addEventListener('click', function(e) {
-            if (!e.target.closest('.filter-group')) {
-                document.querySelectorAll('.filter-options').forEach(filter => {
-                    filter.classList.remove('show');
-                });
-            }
+function formatTime(timestamp) {
+    const date = new Date(timestamp);
+    return date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+}
+
+// Cerrar filtros al hacer clic fuera de ellos
+document.addEventListener('click', function(e) {
+    if (!e.target.closest('.filter-group')) {
+        document.querySelectorAll('.filter-options').forEach(filter => {
+            filter.classList.remove('show');
         });
+    }
+});
     </script>
 </body>
 </html>
