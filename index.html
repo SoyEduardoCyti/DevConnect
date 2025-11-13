@@ -1786,21 +1786,25 @@ async function login(e){
     loginButton.setAttribute('data-original-text', loginButton.textContent);
     setLoading(loginButton, true);
     
-    try {
+  try {
         const passwordHash = await hashPassword(password);
         
         // Buscar usuario por username y password_hash
-        const { data: userData, error: userError } = await supabase
+        const { data: users, error: userError } = await supabase
             .from('usuarios')
-            .select('*')
+            .select('*, tipo_usuario!inner(nombre)')
             .eq('username', username)
             .eq('password_hash', passwordHash)
-            .eq('activo', 1)
-            .single();
+            .eq('activo', 1);
         
-        if (userError || !userData) {
+        if (userError) throw userError;
+        
+        if (!users || users.length === 0) {
             throw new Error('Usuario o contraseña incorrectos');
         }
+        
+        const userData = users[0];
+        userData.type = userData.tipo_usuario.nombre;
         
         currentUser = userData;
         currentSession = { user: { id: userData.id } };
@@ -1841,13 +1845,12 @@ async function register(e){
     
     try {
         // Verificar si el username ya existe
-        const { data: existingUser, error: checkError } = await supabase
+        const { data: existingUsers } = await supabase
             .from('usuarios')
             .select('id')
-            .eq('username', username)
-            .single();
+            .eq('username', username);
         
-        if (existingUser) {
+        if (existingUsers && existingUsers.length > 0) {
             throw new Error('El nombre de usuario ya está en uso');
         }
         
@@ -1856,9 +1859,10 @@ async function register(e){
             .from('tipo_usuario')
             .select('id')
             .eq('nombre', type)
-            .single();
+            .maybeSingle();
         
         if (tipoError) throw tipoError;
+        if (!tipoData) throw new Error('Tipo de usuario no encontrado');
         
         const passwordHash = await hashPassword(password);
         
@@ -1893,32 +1897,31 @@ async function register(e){
             const selectedAreas = Array.from(document.querySelectorAll('.area-checkbox:checked')).map(i => i.value);
             
             // Insertar lenguajes
+ // Insertar lenguajes
             for (const lang of selectedLangs) {
-                const { data: langData } = await supabase
+                const { data: langResults } = await supabase
                     .from('lenguajes')
                     .select('id')
-                    .eq('nombre', lang)
-                    .single();
+                    .eq('nombre', lang);
                 
-                if (langData) {
+                if (langResults && langResults.length > 0) {
                     await supabase
                         .from('desarrollador_lenguajes')
-                        .insert([{ desarrollador_id: newUser.id, lenguaje_id: langData.id }]);
+                        .insert([{ desarrollador_id: newUser.id, lenguaje_id: langResults[0].id }]);
                 }
             }
             
             // Insertar áreas
             for (const area of selectedAreas) {
-                const { data: areaData } = await supabase
+                const { data: areaResults } = await supabase
                     .from('areas_especializacion')
                     .select('id')
-                    .eq('nombre', area)
-                    .single();
+                    .eq('nombre', area);
                 
-                if (areaData) {
+                if (areaResults && areaResults.length > 0) {
                     await supabase
                         .from('desarrollador_areas')
-                        .insert([{ desarrollador_id: newUser.id, area_id: areaData.id }]);
+                        .insert([{ desarrollador_id: newUser.id, area_id: areaResults[0].id }]);
                 }
             }
         }
@@ -2050,17 +2053,17 @@ async function addJob(e){
         }
         
         // Insertar requisitos
+       // Insertar requisitos
         for (const req of requirements) {
-            const { data: langData } = await supabase
+            const { data: langResults } = await supabase
                 .from('lenguajes')
                 .select('id')
-                .eq('nombre', req)
-                .single();
+                .eq('nombre', req);
             
-            if (langData) {
+            if (langResults && langResults.length > 0) {
                 await supabase
                     .from('oferta_requisitos')
-                    .insert([{ oferta_id: newJobId, lenguaje_id: langData.id }]);
+                    .insert([{ oferta_id: newJobId, lenguaje_id: langResults[0].id }]);
             }
         }
         
@@ -2316,10 +2319,9 @@ function displayDevelopers(list, developersToShow) {
         card.className = 'developer-card card';
         
         const nameHtml = `<div class="developer-name">${escapeHtml(dev.first_name)} ${escapeHtml(dev.last_name)}</div>`;
-        const languagesHtml = `<div class="developer-skills">${(dev.languages || []).map(lang => `<span class="tag primary">${escapeHtml(lang)}</span>`).join('') }</div>`;
-         
-         
-            const areasHtml = `<div class="developer-skills">${(dev.areas || []).map(area => `<span class="tag">${escapeHtml(area)}</span>`).join('')}</div>`;
+        const languagesHtml = `<div class="developer-skills">${(dev.languages || []).map(lang => `<span class="tag primary">${escapeHtml(lang)}</span>`).join('')
+        }</div>`;
+        const areasHtml = `<div class="developer-skills">${(dev.areas || []).map(area => `<span class="tag">${escapeHtml(area)}</span>`).join('')}</div>`;
         
         const contactBtn = `<button class="btn btn-secondary btn-sm" onclick="contactDeveloper('${dev.id}')">
             <i class="fas fa-comments"></i>
@@ -2757,17 +2759,16 @@ async function sendMessage(){
 async function openChat(jobId, otherUserId, jobTitle){
     try {
         // Verificar si ya existe una conversación
-        const { data: existingConv, error: searchError } = await supabase
+        const { data: existingConvs } = await supabase
             .from('conversaciones')
             .select('*')
             .eq('oferta_id', jobId)
-            .or(`and(usuario1_id.eq.${currentUser.id},usuario2_id.eq.${otherUserId}),and(usuario1_id.eq.${otherUserId},usuario2_id.eq.${currentUser.id})`)
-            .single();
+            .or(`and(usuario1_id.eq.${currentUser.id},usuario2_id.eq.${otherUserId}),and(usuario1_id.eq.${otherUserId},usuario2_id.eq.${currentUser.id})`);
         
         let conversationId;
         
-        if (existingConv) {
-            conversationId = existingConv.id;
+        if (existingConvs && existingConvs.length > 0) {
+            conversationId = existingConvs[0].id;
         } else {
             // Crear nueva conversación
             const { data: newConv, error: createError } = await supabase
@@ -2786,13 +2787,14 @@ async function openChat(jobId, otherUserId, jobTitle){
         }
         
         // Obtener información del otro usuario
-        const { data: otherUser, error: userError } = await supabase
+        const { data: otherUsers, error: userError } = await supabase
             .from('usuarios')
             .select('nombres, apellidos')
-            .eq('id', otherUserId)
-            .single();
+            .eq('id', otherUserId);
         
-        if (userError) throw userError;
+        if (userError || !otherUsers || otherUsers.length === 0) throw new Error('Usuario no encontrado');
+        
+        const otherUser = otherUsers[0];
         
         currentChat = {
             id: conversationId,
