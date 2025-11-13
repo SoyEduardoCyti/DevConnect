@@ -1505,7 +1505,6 @@ const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // Variables globales
 let currentUser = null;
-let currentSession = null;
 let jobs = [];
 let developers = [];
 let chats = {};
@@ -1517,33 +1516,32 @@ let selectedAreas = [];
 // Estado de autenticación
 let isAuthenticated = false;
 
+// IDs de tipos de usuario (debes verificar estos en tu BD)
+const TIPO_EMPLEADOR = 1;
+const TIPO_DESARROLLADOR = 2;
+
 // Inicializar la aplicación
-document.addEventListener('DOMContentLoaded', async function() {
-    // No verificamos sesión de Supabase Auth, manejamos todo localmente
-    isAuthenticated = false;
-    showUnauthenticatedUI();
+document.addEventListener('DOMContentLoaded', function() {
+    const savedUser = localStorage.getItem('devconnect_user');
+    
+    if (savedUser) {
+        currentUser = JSON.parse(savedUser);
+        isAuthenticated = true;
+        showAuthenticatedUI();
+    } else {
+        isAuthenticated = false;
+        showUnauthenticatedUI();
+    }
 });
 
-// Cargar datos del usuario actual
-async function loadCurrentUser() {
-    try {
-        const { data, error } = await supabase
-            .from('usuarios')
-            .select(`
-                *,
-                tipo_usuario!inner(nombre)
-            `)
-            .eq('id', currentSession.user.id)
-            .single();
-        
-        if (error) throw error;
-        
-        // Agregar el tipo de usuario
-        data.type = data.tipo_usuario.nombre;
-        currentUser = data;
-    } catch (error) {
-        console.error('Error al cargar usuario:', error);
-    }
+// Función para hashear contraseñas
+async function hashPassword(password) {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(password);
+    const hash = await crypto.subtle.digest('SHA-256', data);
+    return Array.from(new Uint8Array(hash))
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('');
 }
 
 function formatDate(dateString) {
@@ -1564,8 +1562,8 @@ function formatDate(dateString) {
 
 // Configurar permisos según el tipo de usuario
 function setupUserPermissions() {
-    const isDeveloper = currentUser.type === 'desarrollador';
-    const isEmployer = currentUser.type === 'empleador';
+    const isDeveloper = currentUser.tipo_id === TIPO_DESARROLLADOR;
+    const isEmployer = currentUser.tipo_id === TIPO_EMPLEADOR;
     
     if (isDeveloper) {
         const addJobBtn = document.querySelector('[onclick="showAddJob()"]');
@@ -1629,11 +1627,11 @@ function showUnauthenticatedUI() {
 function updateUserInfo() {
     if (currentUser) {
         document.getElementById('userName').textContent = currentUser.nombres + ' ' + currentUser.apellidos;
-        document.getElementById('userRole').textContent = currentUser.type === 'empleador' ? 'Empleador' : 'Desarrollador';
+        document.getElementById('userRole').textContent = currentUser.tipo_id === TIPO_EMPLEADOR ? 'Empleador' : 'Desarrollador';
         document.getElementById('userAvatar').textContent = currentUser.nombres.charAt(0).toUpperCase();
         
         document.getElementById('dashboardUserName').textContent = currentUser.nombres;
-        document.getElementById('dashboardUserRole').textContent = currentUser.type === 'empleador' ? 'Empleador' : 'Desarrollador';
+        document.getElementById('dashboardUserRole').textContent = currentUser.tipo_id === TIPO_EMPLEADOR ? 'Empleador' : 'Desarrollador';
     }
 }
 
@@ -1768,15 +1766,7 @@ function toggleSidebar() {
     sidebar.classList.toggle('collapsed');
 }
 
-// Función para hashear contraseñas (simple, en producción usar bcrypt en backend)
-async function hashPassword(password) {
-    const msgBuffer = new TextEncoder().encode(password);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-}
-
-// Función de login sin Supabase Auth
+// Función de login
 async function login(e){
     e.preventDefault();
     const username = document.getElementById('loginUsername').value;
@@ -1786,29 +1776,25 @@ async function login(e){
     loginButton.setAttribute('data-original-text', loginButton.textContent);
     setLoading(loginButton, true);
     
-  try {
-        const passwordHash = await hashPassword(password);
+    try {
+        const hashedPassword = await hashPassword(password);
         
-        // Buscar usuario por username y password_hash
-        const { data: users, error: userError } = await supabase
+        const { data: userData, error: userError } = await supabase
             .from('usuarios')
-            .select('*, tipo_usuario!inner(nombre)')
+            .select('*')
             .eq('username', username)
-            .eq('password_hash', passwordHash)
-            .eq('activo', 1);
+            .eq('password_hash', hashedPassword)
+            .eq('activo', 1)
+            .single();
         
-        if (userError) throw userError;
-        
-        if (!users || users.length === 0) {
+        if (userError || !userData) {
             throw new Error('Usuario o contraseña incorrectos');
         }
         
-        const userData = users[0];
-        userData.type = userData.tipo_usuario.nombre;
-        
         currentUser = userData;
-        currentSession = { user: { id: userData.id } };
         isAuthenticated = true;
+        
+        localStorage.setItem('devconnect_user', JSON.stringify(currentUser));
         
         showAuthenticatedUI();
     } catch (error) {
@@ -1818,7 +1804,7 @@ async function login(e){
     }
 }
 
-// Función de registro sin Supabase Auth
+// Función de registro
 async function register(e){
     e.preventDefault();
     
@@ -1845,32 +1831,22 @@ async function register(e){
     
     try {
         // Verificar si el username ya existe
-        const { data: existingUsers } = await supabase
+        const { data: existingUser } = await supabase
             .from('usuarios')
-            .select('id')
-            .eq('username', username);
+            .select('username')
+            .eq('username', username)
+            .single();
         
-        if (existingUsers && existingUsers.length > 0) {
+        if (existingUser) {
             throw new Error('El nombre de usuario ya está en uso');
         }
         
-        // Obtener el ID del tipo de usuario
-        const { data: tipoData, error: tipoError } = await supabase
-            .from('tipo_usuario')
-            .select('id')
-            .eq('nombre', type)
-            .maybeSingle();
+        const hashedPassword = await hashPassword(password);
         
-        if (tipoError) throw tipoError;
-        if (!tipoData) throw new Error('Tipo de usuario no encontrado');
-        
-        const passwordHash = await hashPassword(password);
-        
-        // Preparar datos del usuario
         const userData = {
             username: username,
-            password_hash: passwordHash,
-            tipo_id: tipoData.id,
+            password_hash: hashedPassword,
+            tipo_id: type === 'empleador' ? TIPO_EMPLEADOR : TIPO_DESARROLLADOR,
             nombres: firstName,
             apellidos: lastName,
             fecha_nacimiento: birthDate,
@@ -1897,38 +1873,62 @@ async function register(e){
             const selectedAreas = Array.from(document.querySelectorAll('.area-checkbox:checked')).map(i => i.value);
             
             // Insertar lenguajes
- // Insertar lenguajes
-            for (const lang of selectedLangs) {
-                const { data: langResults } = await supabase
+            for (const langName of selectedLangs) {
+                // Obtener o crear lenguaje
+                let { data: lang } = await supabase
                     .from('lenguajes')
                     .select('id')
-                    .eq('nombre', lang);
+                    .eq('nombre', langName)
+                    .single();
                 
-                if (langResults && langResults.length > 0) {
-                    await supabase
-                        .from('desarrollador_lenguajes')
-                        .insert([{ desarrollador_id: newUser.id, lenguaje_id: langResults[0].id }]);
+                if (!lang) {
+                    const { data: newLang } = await supabase
+                        .from('lenguajes')
+                        .insert([{ nombre: langName }])
+                        .select()
+                        .single();
+                    lang = newLang;
                 }
+                
+                // Relacionar con desarrollador
+                await supabase
+                    .from('desarrollador_lenguajes')
+                    .insert([{
+                        desarrollador_id: newUser.id,
+                        lenguaje_id: lang.id
+                    }]);
             }
             
             // Insertar áreas
-            for (const area of selectedAreas) {
-                const { data: areaResults } = await supabase
+            for (const areaName of selectedAreas) {
+                let { data: area } = await supabase
                     .from('areas_especializacion')
                     .select('id')
-                    .eq('nombre', area);
+                    .eq('nombre', areaName)
+                    .single();
                 
-                if (areaResults && areaResults.length > 0) {
-                    await supabase
-                        .from('desarrollador_areas')
-                        .insert([{ desarrollador_id: newUser.id, area_id: areaResults[0].id }]);
+                if (!area) {
+                    const { data: newArea } = await supabase
+                        .from('areas_especializacion')
+                        .insert([{ nombre: areaName }])
+                        .select()
+                        .single();
+                    area = newArea;
                 }
+                
+                await supabase
+                    .from('desarrollador_areas')
+                    .insert([{
+                        desarrollador_id: newUser.id,
+                        area_id: area.id
+                    }]);
             }
         }
         
         currentUser = newUser;
-        currentSession = { user: { id: newUser.id } };
         isAuthenticated = true;
+        
+        localStorage.setItem('devconnect_user', JSON.stringify(currentUser));
         
         alert('Registro exitoso');
         showAuthenticatedUI();
@@ -1944,8 +1944,8 @@ async function register(e){
 
 async function logout(){
     currentUser = null;
-    currentSession = null;
     isAuthenticated = false;
+    localStorage.removeItem('devconnect_user');
     showUnauthenticatedUI();
 }
 
@@ -1957,12 +1957,12 @@ function editJob(jobId) {
         return;
     }
     
-    document.getElementById('jobTitle').value = job.title;
-    document.getElementById('jobCompany').value = job.company;
-    document.getElementById('jobDescription').value = job.description;
+    document.getElementById('jobTitle').value = job.titulo;
+    document.getElementById('jobCompany').value = job.empresa;
+    document.getElementById('jobDescription').value = job.descripcion;
     
     document.querySelectorAll('.job-req').forEach(checkbox => {
-        checkbox.checked = job.requirements.includes(checkbox.value);
+        checkbox.checked = job.requisitos.some(r => r.nombre === checkbox.value);
     });
     
     document.getElementById('addJobForm').dataset.jobId = jobId;
@@ -1981,13 +1981,13 @@ async function deleteJob(jobId, jobTitle) {
     }
     
     try {
-        // Primero eliminar requisitos asociados
+        // Primero eliminar requisitos
         await supabase
             .from('oferta_requisitos')
             .delete()
             .eq('oferta_id', jobId);
         
-        // Luego eliminar la oferta
+        // Luego eliminar oferta
         const { error } = await supabase
             .from('ofertas_trabajo')
             .delete()
@@ -2011,22 +2011,17 @@ async function addJob(e){
     addJobButton.setAttribute('data-original-text', addJobButton.textContent);
     setLoading(addJobButton, true);
     
-    const title = document.getElementById('jobTitle').value;
-    const company = document.getElementById('jobCompany').value;
-    const description = document.getElementById('jobDescription').value;
-    const requirements = Array.from(document.querySelectorAll('.job-req:checked')).map(i => i.value);
+    const jobData = {
+        titulo: document.getElementById('jobTitle').value,
+        empresa: document.getElementById('jobCompany').value,
+        descripcion: document.getElementById('jobDescription').value,
+        empleador_id: currentUser.id,
+        fecha_publicacion: new Date().toISOString(),
+        activa: 1
+    };
     
     try {
-        const jobData = {
-            titulo: title,
-            empresa: company,
-            descripcion: description,
-            empleador_id: currentUser.id,
-            fecha_publicacion: new Date().toISOString(),
-            activa: 1
-        };
-        
-        let newJobId = jobId;
+        let finalJobId;
         
         if (isEdit) {
             const { error } = await supabase
@@ -2036,38 +2031,53 @@ async function addJob(e){
             
             if (error) throw error;
             
-            // Eliminar requisitos anteriores
+            // Eliminar requisitos antiguos
             await supabase
                 .from('oferta_requisitos')
                 .delete()
                 .eq('oferta_id', jobId);
+            
+            finalJobId = jobId;
+            alert('Oferta actualizada exitosamente');
         } else {
-            const { data, error } = await supabase
+            const { data: newJob, error } = await supabase
                 .from('ofertas_trabajo')
                 .insert([jobData])
                 .select()
                 .single();
             
             if (error) throw error;
-            newJobId = data.id;
+            
+            finalJobId = newJob.id;
+            alert('Oferta agregada exitosamente');
         }
         
-        // Insertar requisitos
-       // Insertar requisitos
-        for (const req of requirements) {
-            const { data: langResults } = await supabase
+        // Agregar requisitos
+        const selectedReqs = Array.from(document.querySelectorAll('.job-req:checked')).map(i => i.value);
+        
+        for (const reqName of selectedReqs) {
+            let { data: lang } = await supabase
                 .from('lenguajes')
                 .select('id')
-                .eq('nombre', req);
+                .eq('nombre', reqName)
+                .single();
             
-            if (langResults && langResults.length > 0) {
-                await supabase
-                    .from('oferta_requisitos')
-                    .insert([{ oferta_id: newJobId, lenguaje_id: langResults[0].id }]);
+            if (!lang) {
+                const { data: newLang } = await supabase
+                    .from('lenguajes')
+                    .insert([{ nombre: reqName }])
+                    .select()
+                    .single();
+                lang = newLang;
             }
+            
+            await supabase
+                .from('oferta_requisitos')
+                .insert([{
+                    oferta_id: finalJobId,
+                    lenguaje_id: lang.id
+                }]);
         }
-        
-        alert(isEdit ? 'Oferta actualizada exitosamente' : 'Oferta agregada exitosamente');
         
         document.getElementById('addJobForm').reset();
         document.getElementById('addJobForm').removeAttribute('data-jobId');
@@ -2102,7 +2112,7 @@ function resetAndShowDashboard() {
 }
 
 function switchTab(tabName) {
-    if (currentUser.type === 'desarrollador' && tabName === 'developers') {
+    if (currentUser.tipo_id === TIPO_DESARROLLADOR && tabName === 'developers') {
         alert('No tienes permisos para ver esta sección.');
         return;
     }
@@ -2113,7 +2123,7 @@ function switchTab(tabName) {
         tab.classList.toggle('active', tab.textContent.includes(
             tabName === 'myJobs' ? 'Mis Publicaciones' : 
             tabName === 'otherJobs' ? 'Otras Publicaciones' : 'Desarrolladores'
-        ) || (currentUser.type === 'desarrollador' && tab.textContent.includes('Publicaciones Disponibles') && tabName === 'myJobs'));
+        ) || (currentUser.tipo_id === TIPO_DESARROLLADOR && tab.textContent.includes('Publicaciones Disponibles') && tabName === 'myJobs'));
     });
     
     if (tabName === 'developers') {
@@ -2146,7 +2156,8 @@ async function loadJobsToDisplay(){
     otherJobsList.innerHTML = '<p>Cargando ofertas...</p>';
     
     try {
-        const { data, error } = await supabase
+        // Cargar ofertas con sus requisitos
+        const { data: ofertas, error } = await supabase
             .from('ofertas_trabajo')
             .select(`
                 *,
@@ -2159,26 +2170,21 @@ async function loadJobsToDisplay(){
         
         if (error) throw error;
         
-        // Formatear datos para que coincidan con la estructura esperada
-        jobs = data.map(job => ({
-            id: job.id,
-            title: job.titulo,
-            company: job.empresa,
-            description: job.descripcion,
-            employer_id: job.empleador_id,
-            publication_date: job.fecha_publicacion,
-            requirements: job.oferta_requisitos.map(req => req.lenguajes.nombre)
+        // Formatear datos
+        jobs = ofertas.map(job => ({
+            ...job,
+            requisitos: job.oferta_requisitos.map(r => r.lenguajes)
         }));
         
         let jobsToShowMy = [];
         let jobsToShowOther = [];
         
-        if (currentUser.type === 'desarrollador') {
+        if (currentUser.tipo_id === TIPO_DESARROLLADOR) {
             jobsToShowMy = jobs;
-        } else if (activeTab === 'myJobs' && currentUser.type === 'empleador') {
-            jobsToShowMy = jobs.filter(job => job.employer_id == currentUser.id);
+        } else if (activeTab === 'myJobs' && currentUser.tipo_id === TIPO_EMPLEADOR) {
+            jobsToShowMy = jobs.filter(job => job.empleador_id == currentUser.id);
         } else if (activeTab === 'otherJobs') {
-            jobsToShowOther = jobs.filter(job => job.employer_id != currentUser.id);
+            jobsToShowOther = jobs.filter(job => job.empleador_id != currentUser.id);
         }
         
         displayJobs(myJobsList, jobsToShowMy);
@@ -2202,31 +2208,31 @@ function displayJobs(list, jobsToShow) {
         const card = document.createElement('div');
         card.className = 'job-card card';
         
-        const titleHtml = `<div class="job-title">${escapeHtml(job.title)}</div>`;
-        const companyHtml = `<div class="job-company">${escapeHtml(job.company)}</div>`;
-        const dateHtml = `<div class="job-date" style="font-size: 0.85rem; color: var(--gray-500); margin-bottom: 0.5rem;">${formatDate(job.publication_date)}</div>`;
-        const descHtml = `<div class="job-description">${escapeHtml(job.description)}</div>`;
-        const reqHtml = `<div class="job-tags">${job.requirements.map(r => `<span class="tag primary">${escapeHtml(r)}</span>`).join('')}</div>`;
+        const titleHtml = `<div class="job-title">${escapeHtml(job.titulo)}</div>`;
+        const companyHtml = `<div class="job-company">${escapeHtml(job.empresa)}</div>`;
+        const dateHtml = `<div class="job-date" style="font-size: 0.85rem; color: var(--gray-500); margin-bottom: 0.5rem;">${formatDate(job.fecha_publicacion)}</div>`;
+        const descHtml = `<div class="job-description">${escapeHtml(job.descripcion)}</div>`;
+        const reqHtml = `<div class="job-tags">${job.requisitos.map(r => `<span class="tag primary">${escapeHtml(r.nombre)}</span>`).join('')}</div>`;
 
         let actionBtnsHtml = '';
         
-        if (currentUser.type === 'empleador' && currentUser.id === job.employer_id) {
+        if (currentUser.tipo_id === TIPO_EMPLEADOR && currentUser.id === job.empleador_id) {
             actionBtnsHtml = `
                 <div class="job-actions">
                     <button class="btn btn-primary btn-sm" onclick="editJob(${job.id})">
                         <i class="fas fa-edit"></i>
                         <span>Editar</span>
                     </button>
-                    <button class="btn btn-error btn-sm" onclick="deleteJob(${job.id}, '${escapeHtml(job.title)}')">
+                    <button class="btn btn-error btn-sm" onclick="deleteJob(${job.id}, '${escapeHtml(job.titulo)}')">
                         <i class="fas fa-trash"></i>
                         <span>Eliminar</span>
                     </button>
                 </div>
             `;
-        } else if (currentUser.type === 'desarrollador') {
+        } else if (currentUser.tipo_id === TIPO_DESARROLLADOR) {
             actionBtnsHtml = `
                 <div class="job-actions">
-                    <button class="btn btn-secondary btn-sm" onclick="openChat(${job.id}, '${job.employer_id}', '${escapeHtml(job.title)}')">
+                    <button class="btn btn-secondary btn-sm" onclick="openChat(${job.id}, ${job.empleador_id}, '${escapeHtml(job.titulo)}')">
                         <i class="fas fa-comments"></i>
                         <span>Contactar</span>
                     </button>
@@ -2260,7 +2266,6 @@ async function loadDevelopers() {
             .from('usuarios')
             .select(`
                 *,
-                tipo_usuario!inner(nombre),
                 desarrollador_lenguajes(
                     lenguajes(nombre)
                 ),
@@ -2268,38 +2273,35 @@ async function loadDevelopers() {
                     areas_especializacion(nombre)
                 )
             `)
-            .eq('tipo_usuario.nombre', 'desarrollador')
+            .eq('tipo_id', TIPO_DESARROLLADOR)
             .eq('activo', 1);
         
         const { data, error } = await query;
         
         if (error) throw error;
         
-        // Formatear datos
         developers = data.map(dev => ({
-            id: dev.id,
-            first_name: dev.nombres,
-            last_name: dev.apellidos,
-            languages: dev.desarrollador_lenguajes.map(dl => dl.lenguajes.nombre),
+            ...dev,
+            lenguajes: dev.desarrollador_lenguajes.map(dl => dl.lenguajes.nombre),
             areas: dev.desarrollador_areas.map(da => da.areas_especializacion.nombre)
         }));
         
-        // Filtrar por lenguajes y áreas seleccionados
-        let filteredDevs = developers;
+        // Aplicar filtros
+        let filtered = developers;
         
         if (selectedLanguages.length > 0) {
-            filteredDevs = filteredDevs.filter(dev => 
-                selectedLanguages.some(lang => dev.languages.includes(lang))
+            filtered = filtered.filter(dev => 
+                selectedLanguages.some(lang => dev.lenguajes.includes(lang))
             );
         }
         
         if (selectedAreas.length > 0) {
-            filteredDevs = filteredDevs.filter(dev => 
+            filtered = filtered.filter(dev => 
                 selectedAreas.some(area => dev.areas.includes(area))
             );
         }
         
-        displayDevelopers(list, filteredDevs);
+        displayDevelopers(list, filtered);
     } catch (error) {
         list.innerHTML = `<p>Error al cargar desarrolladores: ${error.message}</p>`;
     }
@@ -2318,12 +2320,11 @@ function displayDevelopers(list, developersToShow) {
         const card = document.createElement('div');
         card.className = 'developer-card card';
         
-        const nameHtml = `<div class="developer-name">${escapeHtml(dev.first_name)} ${escapeHtml(dev.last_name)}</div>`;
-        const languagesHtml = `<div class="developer-skills">${(dev.languages || []).map(lang => `<span class="tag primary">${escapeHtml(lang)}</span>`).join('')
-        }</div>`;
+        const nameHtml = `<div class="developer-name">${escapeHtml(dev.nombres)} ${escapeHtml(dev.apellidos)}</div>`;
+        const languagesHtml = `<div class="developer-skills">${(dev.lenguajes || []).map(lang => `<span class="tag primary">${escapeHtml(lang)}</span>`).join('')}</div>`;
         const areasHtml = `<div class="developer-skills">${(dev.areas || []).map(area => `<span class="tag">${escapeHtml(area)}</span>`).join('')}</div>`;
         
-        const contactBtn = `<button class="btn btn-secondary btn-sm" onclick="contactDeveloper('${dev.id}')">
+        const contactBtn = `<button class="btn btn-secondary btn-sm" onclick="contactDeveloper(${dev.id})">
             <i class="fas fa-comments"></i>
             <span>Contactar</span>
         </button>`;
@@ -2347,9 +2348,9 @@ function displayDevelopers(list, developersToShow) {
 function contactDeveloper(devId) {
     const chatJob = {
         id: 'contact_' + Date.now(),
-        title: 'Contacto directo',
-        company: currentUser.empresa || 'Sin empresa especificada',
-        employer_id: currentUser.id
+        titulo: 'Contacto directo',
+        empresa: currentUser.empresa || 'Sin empresa especificada',
+        empleador_id: currentUser.id
     };
     
     openChat(chatJob.id, devId, 'Contacto directo');
@@ -2457,7 +2458,6 @@ function doPasswordsMatch() {
 }  
 
 function resetPasswordValidation() {
-    // Resetear todos los indicadores
     document.querySelectorAll('.requirement').forEach(el => {
         el.classList.remove('valid');
         el.classList.add('invalid');
@@ -2539,14 +2539,13 @@ async function loadChatList(){
     chatList.innerHTML = '<p>Cargando conversaciones...</p>';
     
     try {
-        // Obtener conversaciones donde el usuario actual participa
         const { data: conversations, error } = await supabase
             .from('conversaciones')
             .select(`
                 *,
-                ofertas_trabajo:oferta_id(titulo),
-                sender:usuario1_id(nombres, apellidos, username),
-                receiver:usuario2_id(nombres, apellidos, username)
+                ofertas_trabajo(titulo),
+                usuario1:usuario1_id(nombres, apellidos),
+                usuario2:usuario2_id(nombres, apellidos)
             `)
             .or(`usuario1_id.eq.${currentUser.id},usuario2_id.eq.${currentUser.id}`)
             .order('ultimo_mensaje', { ascending: false });
@@ -2554,15 +2553,14 @@ async function loadChatList(){
         if (error) throw error;
         
         if (conversations && conversations.length > 0) {
-            // Formatear conversaciones para mostrar
             const formattedConvs = conversations.map(conv => {
-                const otherUser = conv.usuario1_id === currentUser.id ? conv.receiver : conv.sender;
+                const otherUser = conv.usuario1_id === currentUser.id ? conv.usuario2 : conv.usuario1;
                 return {
                     id: conv.id,
                     jobTitle: conv.ofertas_trabajo?.titulo || 'Chat directo',
                     otherUserName: `${otherUser.nombres} ${otherUser.apellidos}`,
                     otherUserId: conv.usuario1_id === currentUser.id ? conv.usuario2_id : conv.usuario1_id,
-                    lastMessage: '', // Se cargará desde la última mensaje
+                    lastMessage: '',
                     lastMessageDate: conv.ultimo_mensaje
                 };
             });
@@ -2631,7 +2629,6 @@ async function loadChatMessages(){
         
         if (error) throw error;
         
-        // Agrupar mensajes por fecha
         const groupedMessages = [];
         let lastDate = null;
         
@@ -2646,11 +2643,7 @@ async function loadChatMessages(){
                 lastDate = msgDate;
             }
             
-            groupedMessages.push({
-                sender_id: msg.remitente_id,
-                message: msg.mensaje,
-                timestamp: msg.fecha_envio
-            });
+            groupedMessages.push(msg);
         });
         
         displayMessages(div, groupedMessages);
@@ -2668,7 +2661,6 @@ function displayMessages(div, messages) {
     }
     
     messages.forEach(msg => {
-        // Si es un separador de fecha, procesarlo
         if (msg.type === 'date_separator') {
             const dateSeparator = document.createElement('div');
             dateSeparator.className = 'message-date-separator';
@@ -2677,17 +2669,16 @@ function displayMessages(div, messages) {
             return;
         }
         
-        // Procesar mensaje normal
         const msgContainer = document.createElement('div');
-        msgContainer.className = `message ${msg.sender_id == currentUser.id ? 'user' : 'other'}`;
+        msgContainer.className = `message ${msg.remitente_id == currentUser.id ? 'user' : 'other'}`;
         
         const contentDiv = document.createElement('div');
         contentDiv.className = 'message-content';
-        contentDiv.textContent = msg.message;
+        contentDiv.textContent = msg.mensaje;
         
         const timeDiv = document.createElement('div');
         timeDiv.className = 'message-time';
-        timeDiv.textContent = formatMessageTime(msg.timestamp);
+        timeDiv.textContent = formatMessageTime(msg.fecha_envio);
         
         msgContainer.appendChild(contentDiv);
         msgContainer.appendChild(timeDiv);
@@ -2697,7 +2688,6 @@ function displayMessages(div, messages) {
     div.scrollTop = div.scrollHeight;
 }
 
-// Función para formatear la hora en formato 12 horas (HH:MM AM/PM)
 function formatMessageTime(timestamp) {
     const date = new Date(timestamp);
     
@@ -2738,7 +2728,6 @@ async function sendMessage(){
         
         if (msgError) throw msgError;
         
-        // Actualizar la última fecha de mensaje en la conversación
         const { error: convError } = await supabase
             .from('conversaciones')
             .update({
@@ -2758,19 +2747,18 @@ async function sendMessage(){
 
 async function openChat(jobId, otherUserId, jobTitle){
     try {
-        // Verificar si ya existe una conversación
-        const { data: existingConvs } = await supabase
+        const { data: existingConv, error: searchError } = await supabase
             .from('conversaciones')
             .select('*')
             .eq('oferta_id', jobId)
-            .or(`and(usuario1_id.eq.${currentUser.id},usuario2_id.eq.${otherUserId}),and(usuario1_id.eq.${otherUserId},usuario2_id.eq.${currentUser.id})`);
+            .or(`and(usuario1_id.eq.${currentUser.id},usuario2_id.eq.${otherUserId}),and(usuario1_id.eq.${otherUserId},usuario2_id.eq.${currentUser.id})`)
+            .single();
         
         let conversationId;
         
-        if (existingConvs && existingConvs.length > 0) {
-            conversationId = existingConvs[0].id;
+        if (existingConv) {
+            conversationId = existingConv.id;
         } else {
-            // Crear nueva conversación
             const { data: newConv, error: createError } = await supabase
                 .from('conversaciones')
                 .insert([{
@@ -2786,15 +2774,13 @@ async function openChat(jobId, otherUserId, jobTitle){
             conversationId = newConv.id;
         }
         
-        // Obtener información del otro usuario
-        const { data: otherUsers, error: userError } = await supabase
+        const { data: otherUser, error: userError } = await supabase
             .from('usuarios')
             .select('nombres, apellidos')
-            .eq('id', otherUserId);
+            .eq('id', otherUserId)
+            .single();
         
-        if (userError || !otherUsers || otherUsers.length === 0) throw new Error('Usuario no encontrado');
-        
-        const otherUser = otherUsers[0];
+        if (userError) throw userError;
         
         currentChat = {
             id: conversationId,
@@ -2817,7 +2803,6 @@ function formatTime(timestamp) {
     return date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
 }
 
-// Cerrar filtros al hacer clic fuera de ellos
 document.addEventListener('click', function(e) {
     if (!e.target.closest('.filter-group')) {
         document.querySelectorAll('.filter-options').forEach(filter => {
@@ -2825,7 +2810,6 @@ document.addEventListener('click', function(e) {
         });
     }
 });
-
     </script>
 </body>
 </html>
