@@ -1,5 +1,4 @@
 
-const _0x4a2b=['supabase','createClient','usuarios','select'];(function(_0x2d8f05,_0x4b81bb){const _0x4d74cb=function(_0x32719f){while(--_0x32719f){_0x2d8f05['push'](_0x2d8f05['shift']());}};_0x4d74cb(++_0x4b81bb);}(_0x4a2b,0x1f4));
 
 // Configuración de Supabase
 const SUPABASE_URL = 'https://mhmlwgsrzmqtsvfofcpw.supabase.co';
