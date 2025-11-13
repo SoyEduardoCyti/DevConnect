@@ -2747,26 +2747,57 @@ async function sendMessage(){
 
 async function openChat(jobId, otherUserId, jobTitle){
     try {
-        const { data: existingConv, error: searchError } = await supabase
+        // Convertir jobId a número si viene como string
+        const numericJobId = typeof jobId === 'string' && jobId.startsWith('contact_') ? null : parseInt(jobId);
+        const numericOtherUserId = parseInt(otherUserId);
+        
+        // Buscar conversación existente entre estos dos usuarios para esta oferta
+        let query = supabase
             .from('conversaciones')
-            .select('*')
-            .eq('oferta_id', jobId)
-            .or(`and(usuario1_id.eq.${currentUser.id},usuario2_id.eq.${otherUserId}),and(usuario1_id.eq.${otherUserId},usuario2_id.eq.${currentUser.id})`)
-            .single();
+            .select('*');
+        
+        // Si hay oferta específica, filtrar por ella
+        if (numericJobId) {
+            query = query.eq('oferta_id', numericJobId);
+        }
+        
+        // Buscar conversación entre los dos usuarios (en cualquier orden)
+        const { data: allConvs, error: searchError } = await query;
+        
+        if (searchError) throw searchError;
+        
+        // Filtrar manualmente para encontrar la conversación correcta
+        let existingConv = null;
+        if (allConvs && allConvs.length > 0) {
+            existingConv = allConvs.find(conv => 
+                (conv.usuario1_id === currentUser.id && conv.usuario2_id === numericOtherUserId && 
+                 (!numericJobId || conv.oferta_id === numericJobId)) ||
+                (conv.usuario1_id === numericOtherUserId && conv.usuario2_id === currentUser.id && 
+                 (!numericJobId || conv.oferta_id === numericJobId))
+            );
+        }
         
         let conversationId;
         
         if (existingConv) {
             conversationId = existingConv.id;
         } else {
+            // Crear nueva conversación
+            const newConvData = {
+                usuario1_id: currentUser.id,
+                usuario2_id: numericOtherUserId,
+                fecha_creacion: new Date().toISOString(),
+                ultimo_mensaje: new Date().toISOString()
+            };
+            
+            // Solo agregar oferta_id si es válido
+            if (numericJobId) {
+                newConvData.oferta_id = numericJobId;
+            }
+            
             const { data: newConv, error: createError } = await supabase
                 .from('conversaciones')
-                .insert([{
-                    oferta_id: jobId,
-                    usuario1_id: currentUser.id,
-                    usuario2_id: otherUserId,
-                    fecha_creacion: new Date().toISOString()
-                }])
+                .insert([newConvData])
                 .select()
                 .single();
             
@@ -2774,10 +2805,11 @@ async function openChat(jobId, otherUserId, jobTitle){
             conversationId = newConv.id;
         }
         
+        // Obtener información del otro usuario
         const { data: otherUser, error: userError } = await supabase
             .from('usuarios')
             .select('nombres, apellidos')
-            .eq('id', otherUserId)
+            .eq('id', numericOtherUserId)
             .single();
         
         if (userError) throw userError;
@@ -2785,7 +2817,7 @@ async function openChat(jobId, otherUserId, jobTitle){
         currentChat = {
             id: conversationId,
             jobTitle: jobTitle,
-            otherUserId: otherUserId,
+            otherUserId: numericOtherUserId,
             otherUserName: `${otherUser.nombres} ${otherUser.apellidos}`
         };
         
@@ -2794,6 +2826,7 @@ async function openChat(jobId, otherUserId, jobTitle){
         document.getElementById('currentChatTitle').innerText = `Chat: ${jobTitle} - ${currentChat.otherUserName}`;
         loadChatMessages();
     } catch (error) {
+        console.error('Error completo:', error);
         alert('Error al abrir chat: ' + error.message);
     }
 }
