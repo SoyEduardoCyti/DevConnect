@@ -1970,6 +1970,17 @@ async function logout(){
         tab.classList.remove('active');
     });
     document.querySelector('.tab').classList.add('active');
+    
+    // Resetear contenidos de tabs
+    document.getElementById('myJobsTabContent').classList.remove('hidden');
+    document.getElementById('otherJobsTabContent').classList.add('hidden');
+    document.getElementById('developersTabContent').classList.add('hidden');
+    document.getElementById('developerFilters').classList.add('hidden');
+    
+    // Limpiar listas
+    document.getElementById('myJobsList').innerHTML = '';
+    document.getElementById('otherJobsList').innerHTML = '';
+    document.getElementById('developersList').innerHTML = '';
 
 }
 
