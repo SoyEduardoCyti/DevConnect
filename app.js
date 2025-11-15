@@ -1,4 +1,11 @@
 
+    if (date.toDateString() === today.toDateString()) {
+        return 'Hoy a las ' + date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+    } else if (date.toDateString() === yesterday.toDateString()) {
+        return 'Ayer a las ' + date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+    } else {
+        return date.toLocaleDateString('es-ES', { year: 'numeric', month: 'long', day: 'numeric' });
+    }
 
 // Configuración de Supabase
 const SUPABASE_URL = 'https://mhmlwgsrzmqtsvfofcpw.supabase.co';
