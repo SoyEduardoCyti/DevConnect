@@ -1,6 +1,3 @@
-
-
-
 // Configuración de Supabase
 const SUPABASE_URL = 'https://mhmlwgsrzmqtsvfofcpw.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1obWx3Z3Nyem1xdHN2Zm9mY3B3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI5NTcwNDMsImV4cCI6MjA3ODUzMzA0M30.56vXzGRxUTU3uS6qwQGJmwTGW67S1mB-jl70SQ_zejE';
