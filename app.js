@@ -15,10 +15,14 @@ let activeTab = 'myJobs';
 let selectedLanguages = [];
 let selectedAreas = [];
 
+// Suscripciones en tiempo real
+let messagesSubscription = null;
+let conversationsSubscription = null;
+
 // Estado de autenticación
 let isAuthenticated = false;
 
-// IDs de tipos de usuario
+// IDs de tipos de usuario (debes verificar estos en tu BD)
 const TIPO_EMPLEADOR = 1;
 const TIPO_DESARROLLADOR = 2;
 
@@ -30,11 +34,18 @@ document.addEventListener('DOMContentLoaded', function() {
         currentUser = JSON.parse(savedUser);
         isAuthenticated = true;
         showAuthenticatedUI();
+        // Iniciar suscripciones en tiempo real
+        setupRealtimeSubscriptions();
     } else {
         isAuthenticated = false;
         showUnauthenticatedUI();
     }
 });
+
+// Función para obtener la fecha/hora actual en formato ISO
+function getCurrentTimestamp() {
+    return new Date().toISOString();
+}
 
 // Función para hashear contraseñas
 async function hashPassword(password) {
@@ -48,17 +59,39 @@ async function hashPassword(password) {
 
 function formatDate(dateString) {
     if (!dateString) return '';
+    
+    // Crear fecha en zona horaria local
     const date = new Date(dateString);
+    
+    // Obtener la fecha actual en zona horaria local
     const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
     const yesterday = new Date(today);
     yesterday.setDate(yesterday.getDate() - 1);
     
-    if (date.toDateString() === today.toDateString()) {
-        return 'Hoy a las ' + date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
-    } else if (date.toDateString() === yesterday.toDateString()) {
-        return 'Ayer a las ' + date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+    const messageDate = new Date(date);
+    messageDate.setHours(0, 0, 0, 0);
+    
+    if (messageDate.getTime() === today.getTime()) {
+        return 'Hoy a las ' + date.toLocaleTimeString('es-MX', { 
+            hour: '2-digit', 
+            minute: '2-digit',
+            timeZone: 'America/Mexico_City'
+        });
+    } else if (messageDate.getTime() === yesterday.getTime()) {
+        return 'Ayer a las ' + date.toLocaleTimeString('es-MX', { 
+            hour: '2-digit', 
+            minute: '2-digit',
+            timeZone: 'America/Mexico_City'
+        });
     } else {
-        return date.toLocaleDateString('es-ES', { year: 'numeric', month: 'long', day: 'numeric' });
+        return date.toLocaleDateString('es-MX', { 
+            year: 'numeric', 
+            month: 'long', 
+            day: 'numeric',
+            timeZone: 'America/Mexico_City'
+        });
     }
 }
 
@@ -352,7 +385,7 @@ async function register(e){
             nombres: firstName,
             apellidos: lastName,
             fecha_nacimiento: birthDate,
-            fecha_registro: new Date().toISOString(),
+            fecha_registro: getCurrentTimestamp(),
             activo: 1
         };
         
@@ -445,44 +478,20 @@ async function register(e){
 }
 
 async function logout(){
-    // Limpiar todas las variables globales
+    // Cancelar suscripciones antes de cerrar sesión
+    if (messagesSubscription) {
+        supabase.removeChannel(messagesSubscription);
+        messagesSubscription = null;
+    }
+    if (conversationsSubscription) {
+        supabase.removeChannel(conversationsSubscription);
+        conversationsSubscription = null;
+    }
+    
     currentUser = null;
     isAuthenticated = false;
-    jobs = [];
-    developers = [];
-    chats = {};
-    currentChat = null;
-    activeTab = 'myJobs';
-    selectedLanguages = [];
-    selectedAreas = [];
-    
-    // Limpiar localStorage
     localStorage.removeItem('devconnect_user');
-    
-    // Resetear la UI completamente
     showUnauthenticatedUI();
-    
-    // Resetear formularios
-    document.getElementById('loginScreen').querySelector('form').reset();
-    document.getElementById('registerScreen').querySelector('form').reset();
-    document.getElementById('addJobForm').reset();
-    
-    // Resetear pestañas activas
-    document.querySelectorAll('.tab').forEach(tab => {
-        tab.classList.remove('active');
-    });
-    document.querySelector('.tab').classList.add('active');
-    
-    // Resetear contenidos de tabs
-    document.getElementById('myJobsTabContent').classList.remove('hidden');
-    document.getElementById('otherJobsTabContent').classList.add('hidden');
-    document.getElementById('developersTabContent').classList.add('hidden');
-    document.getElementById('developerFilters').classList.add('hidden');
-    
-    // Limpiar listas
-    document.getElementById('myJobsList').innerHTML = '';
-    document.getElementById('otherJobsList').innerHTML = '';
-    document.getElementById('developersList').innerHTML = '';
 }
 
 // Función para editar trabajo
@@ -552,7 +561,7 @@ async function addJob(e){
         empresa: document.getElementById('jobCompany').value,
         descripcion: document.getElementById('jobDescription').value,
         empleador_id: currentUser.id,
-        fecha_publicacion: new Date().toISOString(),
+        fecha_publicacion: getCurrentTimestamp(),
         activa: 1
     };
     
@@ -892,6 +901,129 @@ function contactDeveloper(devId) {
     openChat(chatJob.id, devId, 'Contacto directo');
 }
 
+// Configurar suscripciones en tiempo real
+function setupRealtimeSubscriptions() {
+    // Cancelar suscripciones anteriores si existen
+    if (conversationsSubscription) {
+        supabase.removeChannel(conversationsSubscription);
+    }
+    
+    // Suscribirse a cambios en conversaciones
+    conversationsSubscription = supabase
+        .channel('conversaciones_channel')
+        .on(
+            'postgres_changes',
+            {
+                event: '*',
+                schema: 'public',
+                table: 'conversaciones',
+                filter: `usuario1_id=eq.${currentUser.id},usuario2_id=eq.${currentUser.id}`
+            },
+            (payload) => {
+                console.log('Cambio en conversaciones:', payload);
+                // Si estamos en la pantalla de chat, recargar la lista
+                if (!document.getElementById('chatScreen').classList.contains('hidden')) {
+                    loadChatList();
+                }
+            }
+        )
+        .subscribe();
+}
+
+// Suscribirse a mensajes de una conversación específica
+function subscribeToMessages(conversationId) {
+    // Cancelar suscripción anterior si existe
+    if (messagesSubscription) {
+        supabase.removeChannel(messagesSubscription);
+    }
+    
+    // Suscribirse a nuevos mensajes de esta conversación
+    messagesSubscription = supabase
+        .channel(`messages_${conversationId}`)
+        .on(
+            'postgres_changes',
+            {
+                event: 'INSERT',
+                schema: 'public',
+                table: 'mensajes',
+                filter: `conversacion_id=eq.${conversationId}`
+            },
+            (payload) => {
+                console.log('Nuevo mensaje recibido:', payload);
+                // Solo agregar el mensaje si no es del usuario actual (para evitar duplicados)
+                if (payload.new.remitente_id !== currentUser.id) {
+                    addNewMessageToUI(payload.new);
+                    
+                    // Reproducir sonido de notificación (opcional)
+                    playNotificationSound();
+                }
+            }
+        )
+        .subscribe();
+}
+
+// Agregar un nuevo mensaje a la interfaz sin recargar todo
+function addNewMessageToUI(message) {
+    const div = document.getElementById('chatMessages');
+    
+    // Verificar si necesitamos agregar un separador de fecha
+    const lastMessage = div.lastElementChild;
+    const newMsgDate = new Date(message.fecha_envio);
+    const localDateStr = newMsgDate.toLocaleDateString('es-MX', { 
+        timeZone: 'America/Mexico_City',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+    });
+    
+    // Si hay mensajes previos, verificar si es un día diferente
+    if (lastMessage && !lastMessage.classList.contains('message-date-separator')) {
+        const lastMsgElement = div.querySelector('.message:last-of-type');
+        if (lastMsgElement) {
+            // Aquí podrías comparar fechas si es necesario
+        }
+    }
+    
+    // Crear el elemento del mensaje
+    const msgContainer = document.createElement('div');
+    msgContainer.className = `message ${message.remitente_id == currentUser.id ? 'user' : 'other'} fade-in`;
+    
+    const contentDiv = document.createElement('div');
+    contentDiv.className = 'message-content';
+    contentDiv.textContent = message.mensaje;
+    
+    const timeDiv = document.createElement('div');
+    timeDiv.className = 'message-time';
+    timeDiv.textContent = formatMessageTime(message.fecha_envio);
+    
+    msgContainer.appendChild(contentDiv);
+    msgContainer.appendChild(timeDiv);
+    div.appendChild(msgContainer);
+    
+    // Scroll automático al final
+    div.scrollTop = div.scrollHeight;
+}
+
+// Función para reproducir sonido de notificación (opcional)
+function playNotificationSound() {
+    // Crear un sonido simple usando Web Audio API
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+    
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+    
+    oscillator.frequency.value = 800;
+    oscillator.type = 'sine';
+    
+    gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
+    
+    oscillator.start(audioContext.currentTime);
+    oscillator.stop(audioContext.currentTime + 0.1);
+}
+
 // Funciones para la verificación de contraseña
 function togglePasswordVisibility(inputId) {
     const input = document.getElementById(inputId);
@@ -1169,14 +1301,21 @@ async function loadChatMessages(){
         let lastDate = null;
         
         messages.forEach(msg => {
-            const msgDate = new Date(msg.fecha_envio).toLocaleDateString('es-ES');
+            // Convertir a fecha local de México
+            const msgDate = new Date(msg.fecha_envio);
+            const localDateStr = msgDate.toLocaleDateString('es-MX', { 
+                timeZone: 'America/Mexico_City',
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit'
+            });
             
-            if (msgDate !== lastDate) {
+            if (localDateStr !== lastDate) {
                 groupedMessages.push({
                     type: 'date_separator',
                     dateFormatted: formatDate(msg.fecha_envio)
                 });
-                lastDate = msgDate;
+                lastDate = localDateStr;
             }
             
             groupedMessages.push(msg);
@@ -1225,19 +1364,17 @@ function displayMessages(div, messages) {
 }
 
 function formatMessageTime(timestamp) {
+    if (!timestamp) return '';
+    
     const date = new Date(timestamp);
     
-    let hours = date.getHours();
-    let minutes = date.getMinutes();
-    const ampm = hours >= 12 ? 'PM' : 'AM';
-    
-    hours = hours % 12;
-    hours = hours ? hours : 12;
-    
-    minutes = minutes < 10 ? '0' + minutes : minutes;
-    hours = hours < 10 ? '0' + hours : hours;
-    
-    return `${hours}:${minutes} ${ampm}`;
+    // Formatear en zona horaria de México
+    return date.toLocaleTimeString('es-MX', { 
+        hour: '2-digit', 
+        minute: '2-digit',
+        hour12: true,
+        timeZone: 'America/Mexico_City'
+    });
 }
 
 async function sendMessage(){
@@ -1258,7 +1395,7 @@ async function sendMessage(){
                 conversacion_id: currentChat.id,
                 remitente_id: currentUser.id,
                 mensaje: messageText,
-                fecha_envio: new Date().toISOString(),
+                fecha_envio: getCurrentTimestamp(),
                 leido: 0
             }]);
         
@@ -1267,7 +1404,7 @@ async function sendMessage(){
         const { error: convError } = await supabase
             .from('conversaciones')
             .update({
-                ultimo_mensaje: new Date().toISOString()
+                ultimo_mensaje: getCurrentTimestamp()
             })
             .eq('id', currentChat.id);
         
@@ -1283,57 +1420,26 @@ async function sendMessage(){
 
 async function openChat(jobId, otherUserId, jobTitle){
     try {
-        // Convertir jobId a número si viene como string
-        const numericJobId = typeof jobId === 'string' && jobId.startsWith('contact_') ? null : parseInt(jobId);
-        const numericOtherUserId = parseInt(otherUserId);
-        
-        // Buscar conversación existente entre estos dos usuarios para esta oferta
-        let query = supabase
+        const { data: existingConv, error: searchError } = await supabase
             .from('conversaciones')
-            .select('*');
-        
-        // Si hay oferta específica, filtrar por ella
-        if (numericJobId) {
-            query = query.eq('oferta_id', numericJobId);
-        }
-        
-        // Buscar conversación entre los dos usuarios (en cualquier orden)
-        const { data: allConvs, error: searchError } = await query;
-        
-        if (searchError) throw searchError;
-        
-        // Filtrar manualmente para encontrar la conversación correcta
-        let existingConv = null;
-        if (allConvs && allConvs.length > 0) {
-            existingConv = allConvs.find(conv => 
-                (conv.usuario1_id === currentUser.id && conv.usuario2_id === numericOtherUserId && 
-                 (!numericJobId || conv.oferta_id === numericJobId)) ||
-                (conv.usuario1_id === numericOtherUserId && conv.usuario2_id === currentUser.id && 
-                 (!numericJobId || conv.oferta_id === numericJobId))
-            );
-        }
+            .select('*')
+            .eq('oferta_id', jobId)
+            .or(`and(usuario1_id.eq.${currentUser.id},usuario2_id.eq.${otherUserId}),and(usuario1_id.eq.${otherUserId},usuario2_id.eq.${currentUser.id})`)
+            .single();
         
         let conversationId;
         
         if (existingConv) {
             conversationId = existingConv.id;
         } else {
-            // Crear nueva conversación
-            const newConvData = {
-                usuario1_id: currentUser.id,
-                usuario2_id: numericOtherUserId,
-                fecha_creacion: new Date().toISOString(),
-                ultimo_mensaje: new Date().toISOString()
-            };
-            
-            // Solo agregar oferta_id si es válido
-            if (numericJobId) {
-                newConvData.oferta_id = numericJobId;
-            }
-            
             const { data: newConv, error: createError } = await supabase
                 .from('conversaciones')
-                .insert([newConvData])
+                .insert([{
+                    oferta_id: jobId,
+                    usuario1_id: currentUser.id,
+                    usuario2_id: otherUserId,
+                    fecha_creacion: getCurrentTimestamp()
+                }])
                 .select()
                 .single();
             
@@ -1341,11 +1447,10 @@ async function openChat(jobId, otherUserId, jobTitle){
             conversationId = newConv.id;
         }
         
-        // Obtener información del otro usuario
         const { data: otherUser, error: userError } = await supabase
             .from('usuarios')
             .select('nombres, apellidos')
-            .eq('id', numericOtherUserId)
+            .eq('id', otherUserId)
             .single();
         
         if (userError) throw userError;
@@ -1353,7 +1458,7 @@ async function openChat(jobId, otherUserId, jobTitle){
         currentChat = {
             id: conversationId,
             jobTitle: jobTitle,
-            otherUserId: numericOtherUserId,
+            otherUserId: otherUserId,
             otherUserName: `${otherUser.nombres} ${otherUser.apellidos}`
         };
         
@@ -1362,14 +1467,20 @@ async function openChat(jobId, otherUserId, jobTitle){
         document.getElementById('currentChatTitle').innerText = `Chat: ${jobTitle} - ${currentChat.otherUserName}`;
         loadChatMessages();
     } catch (error) {
-        console.error('Error completo:', error);
         alert('Error al abrir chat: ' + error.message);
     }
 }
 
 function formatTime(timestamp) {
+    if (!timestamp) return '';
+    
     const date = new Date(timestamp);
-    return date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+    
+    return date.toLocaleTimeString('es-MX', { 
+        hour: '2-digit', 
+        minute: '2-digit',
+        timeZone: 'America/Mexico_City'
+    });
 }
 
 document.addEventListener('click', function(e) {

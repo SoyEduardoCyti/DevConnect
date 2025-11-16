@@ -393,7 +393,8 @@
                                 </div>
                                 <div class="chat-messages" id="chatMessages"></div>
                                 <div class="message-input">
-                                    <input type="text" id="chatInput" placeholder="Escribe un mensaje..." />
+                                    <input type="text" id="chatInput" placeholder="Escribe un mensaje..." 
+                                    onkeypress="if(event.key === 'Enter') sendMessage()" />
                                     <button onclick="sendMessage()">Enviar</button>
                                 </div>
                             </div>
