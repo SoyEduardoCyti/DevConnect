@@ -2,8 +2,14 @@
 const SUPABASE_URL = 'https://mhmlwgsrzmqtsvfofcpw.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1obWx3Z3Nyem1xdHN2Zm9mY3B3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI5NTcwNDMsImV4cCI6MjA3ODUzMzA0M30.56vXzGRxUTU3uS6qwQGJmwTGW67S1mB-jl70SQ_zejE';
 
-// Inicializar cliente de Supabase
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+// Inicializar cliente de Supabase con Realtime habilitado
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+    realtime: {
+        params: {
+            eventsPerSecond: 10
+        }
+    }
+});
 
 // Variables globales
 let currentUser = null;
@@ -935,11 +941,16 @@ function subscribeToMessages(conversationId) {
     // Cancelar suscripción anterior si existe
     if (messagesSubscription) {
         supabase.removeChannel(messagesSubscription);
+        messagesSubscription = null;
     }
     
-    // Suscribirse a nuevos mensajes de esta conversación
+    console.log('Suscribiéndose a mensajes de conversación:', conversationId);
+    
+    // Crear canal único para esta conversación
+    const channelName = `mensajes:conversacion_id=eq.${conversationId}`;
+    
     messagesSubscription = supabase
-        .channel(`messages_${conversationId}`)
+        .channel(channelName)
         .on(
             'postgres_changes',
             {
@@ -949,17 +960,21 @@ function subscribeToMessages(conversationId) {
                 filter: `conversacion_id=eq.${conversationId}`
             },
             (payload) => {
-                console.log('Nuevo mensaje recibido:', payload);
-                // Solo agregar el mensaje si no es del usuario actual (para evitar duplicados)
-                if (payload.new.remitente_id !== currentUser.id) {
+                console.log('✅ Nuevo mensaje recibido:', payload);
+                
+                // Agregar mensaje solo si no es del usuario actual
+                if (payload.new && payload.new.remitente_id != currentUser.id) {
                     addNewMessageToUI(payload.new);
-                    
-                    // Reproducir sonido de notificación (opcional)
                     playNotificationSound();
                 }
             }
         )
-        .subscribe();
+        .subscribe((status) => {
+            console.log('Estado de suscripción:', status);
+            if (status === 'SUBSCRIBED') {
+                console.log('✅ Suscrito exitosamente a mensajes en tiempo real');
+            }
+        });
 }
 
 // Agregar un nuevo mensaje a la interfaz sin recargar todo
@@ -1288,6 +1303,9 @@ async function loadChatMessages(){
         return;
     }
     
+    // Suscribirse a mensajes en tiempo real de esta conversación
+    subscribeToMessages(currentChat.id);
+    
     try {
         const { data: messages, error } = await supabase
             .from('mensajes')
@@ -1388,16 +1406,23 @@ async function sendMessage(){
     
     if(!messageText) return;
     
+    // Limpiar el input inmediatamente para mejor UX
+    input.value = '';
+    
+    // Agregar el mensaje a la UI inmediatamente (optimistic update)
+    const tempMessage = {
+        conversacion_id: currentChat.id,
+        remitente_id: currentUser.id,
+        mensaje: messageText,
+        fecha_envio: getCurrentTimestamp(),
+        leido: 0
+    };
+    addNewMessageToUI(tempMessage);
+    
     try {
         const { error: msgError } = await supabase
             .from('mensajes')
-            .insert([{
-                conversacion_id: currentChat.id,
-                remitente_id: currentUser.id,
-                mensaje: messageText,
-                fecha_envio: getCurrentTimestamp(),
-                leido: 0
-            }]);
+            .insert([tempMessage]);
         
         if (msgError) throw msgError;
         
@@ -1410,11 +1435,12 @@ async function sendMessage(){
         
         if (convError) throw convError;
         
-        input.value = '';
-        loadChatMessages();
+        // Actualizar lista de conversaciones
         loadChatList();
     } catch (error) {
         alert('Error al enviar mensaje: ' + error.message);
+        // En caso de error, podrías remover el mensaje temporal de la UI
+        loadChatMessages();
     }
 }
 

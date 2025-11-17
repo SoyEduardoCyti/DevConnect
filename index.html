@@ -392,11 +392,10 @@
                                     <h3 id="currentChatTitle">Selecciona una conversación</h3>
                                 </div>
                                 <div class="chat-messages" id="chatMessages"></div>
-                                <div class="message-input">
-                                    <input type="text" id="chatInput" placeholder="Escribe un mensaje..." 
-                                    onkeypress="if(event.key === 'Enter') sendMessage()" />
-                                    <button onclick="sendMessage()">Enviar</button>
-                                </div>
+                                    <div class="message-input">
+                                        <input type="text" id="chatInput" placeholder="Escribe un mensaje..." onkeypress="if(event.key==='Enter'){sendMessage();}" />
+                                        <button onclick="sendMessage()">Enviar</button>
+                                    </div>
                             </div>
                         </div>
                     </div>
