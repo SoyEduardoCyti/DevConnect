@@ -20,6 +20,7 @@ let currentChat = null;
 let activeTab = 'myJobs';
 let selectedLanguages = [];
 let selectedAreas = [];
+let totalUnreadMessages = 0; // Contador global de mensajes no leídos
 
 // Suscripciones en tiempo real
 let messagesSubscription = null;
@@ -66,10 +67,7 @@ async function hashPassword(password) {
 function formatDate(dateString) {
     if (!dateString) return '';
     
-    // Crear fecha en zona horaria local
     const date = new Date(dateString);
-    
-    // Obtener la fecha actual en zona horaria local
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     
@@ -79,24 +77,21 @@ function formatDate(dateString) {
     const messageDate = new Date(date);
     messageDate.setHours(0, 0, 0, 0);
     
+    const timePart = date.toLocaleTimeString('es-MX', { 
+        hour: '2-digit', 
+        minute: '2-digit',
+        hour12: true
+    });
+    
     if (messageDate.getTime() === today.getTime()) {
-        return 'Hoy a las ' + date.toLocaleTimeString('es-MX', { 
-            hour: '2-digit', 
-            minute: '2-digit',
-            timeZone: 'America/Mexico_City'
-        });
+        return `Hoy a las ${timePart}`;
     } else if (messageDate.getTime() === yesterday.getTime()) {
-        return 'Ayer a las ' + date.toLocaleTimeString('es-MX', { 
-            hour: '2-digit', 
-            minute: '2-digit',
-            timeZone: 'America/Mexico_City'
-        });
+        return `Ayer a las ${timePart}`;
     } else {
         return date.toLocaleDateString('es-MX', { 
             year: 'numeric', 
             month: 'long', 
-            day: 'numeric',
-            timeZone: 'America/Mexico_City'
+            day: 'numeric'
         });
     }
 }
@@ -1222,18 +1217,22 @@ async function loadChatList(){
     chatList.innerHTML = '<p>Cargando conversaciones...</p>';
     
     try {
+        // Cargar conversaciones donde el usuario participa (usuario1_id O usuario2_id)
         const { data: conversations, error } = await supabase
             .from('conversaciones')
             .select(`
                 *,
                 ofertas_trabajo(titulo),
-                usuario1:usuario1_id(nombres, apellidos),
-                usuario2:usuario2_id(nombres, apellidos)
+                usuario1:usuarios!conversaciones_usuario1_id_fkey(nombres, apellidos),
+                usuario2:usuarios!conversaciones_usuario2_id_fkey(nombres, apellidos)
             `)
             .or(`usuario1_id.eq.${currentUser.id},usuario2_id.eq.${currentUser.id}`)
-            .order('ultimo_mensaje', { ascending: false });
+            .order('ultimo_mensaje', { ascending: false, nullsFirst: false });
         
-        if (error) throw error;
+        if (error) {
+            console.error('Error al cargar conversaciones:', error);
+            throw error;
+        }
         
         if (conversations && conversations.length > 0) {
             const formattedConvs = conversations.map(conv => {
@@ -1244,7 +1243,8 @@ async function loadChatList(){
                     otherUserName: `${otherUser.nombres} ${otherUser.apellidos}`,
                     otherUserId: conv.usuario1_id === currentUser.id ? conv.usuario2_id : conv.usuario1_id,
                     lastMessage: '',
-                    lastMessageDate: conv.ultimo_mensaje
+                    lastMessageDate: conv.ultimo_mensaje,
+                    unreadCount: 0 // Agregar contador de no leídos
                 };
             });
             
@@ -1254,6 +1254,7 @@ async function loadChatList(){
         }
     } catch (error) {
         chatList.innerHTML = `<p>Error al cargar conversaciones: ${error.message}</p>`;
+        console.error('Error completo:', error);
     }
 }
 
@@ -1321,8 +1322,9 @@ async function loadChatMessages(){
         messages.forEach(msg => {
             // Convertir a fecha local de México
             const msgDate = new Date(msg.fecha_envio);
-            const localDateStr = msgDate.toLocaleDateString('es-MX', { 
-                timeZone: 'America/Mexico_City',
+            const mexicoDate = new Date(msgDate.toLocaleString('en-US', { timeZone: 'America/Mexico_City' }));
+            
+            const localDateStr = mexicoDate.toLocaleDateString('es-MX', { 
                 year: 'numeric',
                 month: '2-digit',
                 day: '2-digit'
@@ -1406,40 +1408,46 @@ async function sendMessage(){
     
     if(!messageText) return;
     
-    // Limpiar el input inmediatamente para mejor UX
+    // Limpiar el input inmediatamente
     input.value = '';
     
-    // Agregar el mensaje a la UI inmediatamente (optimistic update)
-    const tempMessage = {
+    // Crear el mensaje
+    const newMessage = {
         conversacion_id: currentChat.id,
         remitente_id: currentUser.id,
         mensaje: messageText,
-        fecha_envio: getCurrentTimestamp(),
+        fecha_envio: new Date().toISOString(), // Usar ISO directo
         leido: 0
     };
-    addNewMessageToUI(tempMessage);
+    
+    // Agregar a la UI inmediatamente (optimistic update)
+    addNewMessageToUI(newMessage);
     
     try {
+        // Enviar a la base de datos
         const { error: msgError } = await supabase
             .from('mensajes')
-            .insert([tempMessage]);
+            .insert([newMessage]);
         
-        if (msgError) throw msgError;
+        if (msgError) {
+            console.error('Error al insertar mensaje:', msgError);
+            throw msgError;
+        }
         
-        const { error: convError } = await supabase
+        console.log('✅ Mensaje enviado exitosamente');
+        
+        // Actualizar última fecha de mensaje en conversación
+        await supabase
             .from('conversaciones')
             .update({
-                ultimo_mensaje: getCurrentTimestamp()
+                ultimo_mensaje: new Date().toISOString()
             })
             .eq('id', currentChat.id);
         
-        if (convError) throw convError;
-        
-        // Actualizar lista de conversaciones
-        loadChatList();
     } catch (error) {
+        console.error('Error completo:', error);
         alert('Error al enviar mensaje: ' + error.message);
-        // En caso de error, podrías remover el mensaje temporal de la UI
+        // Recargar mensajes en caso de error
         loadChatMessages();
     }
 }
