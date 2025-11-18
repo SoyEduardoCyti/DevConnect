@@ -976,24 +976,6 @@ function subscribeToMessages(conversationId) {
 function addNewMessageToUI(message) {
     const div = document.getElementById('chatMessages');
     
-    // Verificar si necesitamos agregar un separador de fecha
-    const lastMessage = div.lastElementChild;
-    const newMsgDate = new Date(message.fecha_envio);
-    const localDateStr = newMsgDate.toLocaleDateString('es-MX', { 
-        timeZone: 'America/Mexico_City',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit'
-    });
-    
-    // Si hay mensajes previos, verificar si es un día diferente
-    if (lastMessage && !lastMessage.classList.contains('message-date-separator')) {
-        const lastMsgElement = div.querySelector('.message:last-of-type');
-        if (lastMsgElement) {
-            // Aquí podrías comparar fechas si es necesario
-        }
-    }
-    
     // Crear el elemento del mensaje
     const msgContainer = document.createElement('div');
     msgContainer.className = `message ${message.remitente_id == currentUser.id ? 'user' : 'other'} fade-in`;
@@ -1014,24 +996,27 @@ function addNewMessageToUI(message) {
     div.scrollTop = div.scrollHeight;
 }
 
-// Función para reproducir sonido de notificación (opcional)
+// Función para reproducir sonido de notificación
 function playNotificationSound() {
-    // Crear un sonido simple usando Web Audio API
-    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    const oscillator = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
-    
-    oscillator.connect(gainNode);
-    gainNode.connect(audioContext.destination);
-    
-    oscillator.frequency.value = 800;
-    oscillator.type = 'sine';
-    
-    gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
-    
-    oscillator.start(audioContext.currentTime);
-    oscillator.stop(audioContext.currentTime + 0.1);
+    try {
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+        
+        oscillator.frequency.value = 800;
+        oscillator.type = 'sine';
+        
+        gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
+        
+        oscillator.start(audioContext.currentTime);
+        oscillator.stop(audioContext.currentTime + 0.1);
+    } catch (error) {
+        console.log('No se pudo reproducir el sonido:', error);
+    }
 }
 
 // Funciones para la verificación de contraseña
@@ -1235,8 +1220,18 @@ async function loadChatList(){
         }
         
         if (conversations && conversations.length > 0) {
-            const formattedConvs = conversations.map(conv => {
+            // Cargar mensajes no leídos para cada conversación
+            const formattedConvs = await Promise.all(conversations.map(async conv => {
                 const otherUser = conv.usuario1_id === currentUser.id ? conv.usuario2 : conv.usuario1;
+                
+                // Contar mensajes no leídos (mensajes donde el remitente NO es el usuario actual y leido = 0)
+                const { count, error: countError } = await supabase
+                    .from('mensajes')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('conversacion_id', conv.id)
+                    .eq('leido', 0)
+                    .neq('remitente_id', currentUser.id);
+                
                 return {
                     id: conv.id,
                     jobTitle: conv.ofertas_trabajo?.titulo || 'Chat directo',
@@ -1244,17 +1239,36 @@ async function loadChatList(){
                     otherUserId: conv.usuario1_id === currentUser.id ? conv.usuario2_id : conv.usuario1_id,
                     lastMessage: '',
                     lastMessageDate: conv.ultimo_mensaje,
-                    unreadCount: 0 // Agregar contador de no leídos
+                    unreadCount: count || 0
                 };
-            });
+            }));
+            
+            // Calcular total de mensajes no leídos
+            totalUnreadMessages = formattedConvs.reduce((sum, conv) => sum + conv.unreadCount, 0);
+            updateUnreadBadge();
             
             displayChatList(chatList, formattedConvs);
         } else {
             chatList.innerHTML = '<p>No tienes conversaciones activas.</p>';
+            totalUnreadMessages = 0;
+            updateUnreadBadge();
         }
     } catch (error) {
         chatList.innerHTML = `<p>Error al cargar conversaciones: ${error.message}</p>`;
         console.error('Error completo:', error);
+    }
+}
+
+// Actualizar el badge de mensajes no leídos
+function updateUnreadBadge() {
+    const badge = document.getElementById('unreadBadge');
+    if (badge) {
+        if (totalUnreadMessages > 0) {
+            badge.textContent = totalUnreadMessages > 99 ? '99+' : totalUnreadMessages;
+            badge.classList.remove('hidden');
+        } else {
+            badge.classList.add('hidden');
+        }
     }
 }
 
@@ -1454,12 +1468,27 @@ async function sendMessage(){
 
 async function openChat(jobId, otherUserId, jobTitle){
     try {
-        const { data: existingConv, error: searchError } = await supabase
+        // Si jobId es temporal (string que empieza con 'contact_'), usar null
+        const isDirectContact = typeof jobId === 'string' && jobId.startsWith('contact_');
+        const actualJobId = isDirectContact ? null : jobId;
+        
+        // Buscar conversación existente
+        let query = supabase
             .from('conversaciones')
-            .select('*')
-            .eq('oferta_id', jobId)
-            .or(`and(usuario1_id.eq.${currentUser.id},usuario2_id.eq.${otherUserId}),and(usuario1_id.eq.${otherUserId},usuario2_id.eq.${currentUser.id})`)
-            .single();
+            .select('*');
+        
+        if (actualJobId) {
+            query = query
+                .eq('oferta_id', actualJobId)
+                .or(`and(usuario1_id.eq.${currentUser.id},usuario2_id.eq.${otherUserId}),and(usuario1_id.eq.${otherUserId},usuario2_id.eq.${currentUser.id})`);
+        } else {
+            // Buscar chat directo sin oferta específica
+            query = query
+                .is('oferta_id', null)
+                .or(`and(usuario1_id.eq.${currentUser.id},usuario2_id.eq.${otherUserId}),and(usuario1_id.eq.${otherUserId},usuario2_id.eq.${currentUser.id})`);
+        }
+        
+        const { data: existingConv, error: searchError } = await query.maybeSingle();
         
         let conversationId;
         
@@ -1469,7 +1498,7 @@ async function openChat(jobId, otherUserId, jobTitle){
             const { data: newConv, error: createError } = await supabase
                 .from('conversaciones')
                 .insert([{
-                    oferta_id: jobId,
+                    oferta_id: actualJobId,
                     usuario1_id: currentUser.id,
                     usuario2_id: otherUserId,
                     fecha_creacion: getCurrentTimestamp()
@@ -1501,6 +1530,7 @@ async function openChat(jobId, otherUserId, jobTitle){
         document.getElementById('currentChatTitle').innerText = `Chat: ${jobTitle} - ${currentChat.otherUserName}`;
         loadChatMessages();
     } catch (error) {
+        console.error('Error completo al abrir chat:', error);
         alert('Error al abrir chat: ' + error.message);
     }
 }
