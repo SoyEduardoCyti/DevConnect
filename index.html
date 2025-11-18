@@ -19,15 +19,15 @@
             </div>
             
             <div class="nav-menu">
-                <div class="nav-item active" onclick="showDashboard()">
+                <div class="nav-item active" id="navDashboard" onclick="showDashboard()">
                     <i class="fas fa-home"></i>
                     <span>Inicio</span>
                 </div>
-                    <div class="nav-item" onclick="showChats()">
-                        <i class="fas fa-comments"></i>
-                        <span>Mensajes</span>
-                        <span id="unreadBadge" class="badge hidden">0</span>
-                    </div>      
+                <div class="nav-item" id="navChats" onclick="showChats()">
+                    <i class="fas fa-comments"></i>
+                    <span>Mensajes</span>
+                    <span id="unreadBadge" class="badge hidden">0</span>
+                </div>    
             </div>
             
             <div class="user-section" id="userSection">

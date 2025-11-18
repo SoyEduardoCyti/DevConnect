@@ -140,6 +140,10 @@ function showAuthenticatedUI() {
     
     updateUserInfo();
     setupUserPermissions();
+    
+    // Actualizar navegación activa al inicio
+    updateActiveNav('dashboard');
+    
     showDashboard();
 }
 
@@ -245,6 +249,13 @@ function showDashboard(){
         return;
     }
     
+    // Cancelar suscripción de mensajes del chat cuando sales
+    if (messagesSubscription) {
+        supabase.removeChannel(messagesSubscription);
+        messagesSubscription = null;
+        console.log('Suscripción de chat cancelada al salir');
+    }
+    
     hideAllScreens();
     document.getElementById('dashboardScreen').classList.remove('hidden');
     updatePageTitle('Dashboard');
@@ -279,7 +290,16 @@ function showChats(){
     hideAllScreens();
     document.getElementById('chatScreen').classList.remove('hidden');
     updatePageTitle('Mensajes');
+    
+    // Cargar la lista de chats
     loadChatList();
+    
+    // Si hay un chat abierto, marcar sus mensajes como leídos
+    if (currentChat) {
+        setTimeout(() => {
+            markMessagesAsRead(currentChat.id);
+        }, 1000);
+    }
 }
 
 function hideAllScreens() {
@@ -1017,7 +1037,7 @@ function subscribeToMessages(conversationId) {
     console.log('Suscribiéndose a mensajes de conversación:', conversationId);
     
     // Crear canal único para esta conversación
-    const channelName = `mensajes:conversacion_id=eq.${conversationId}`;
+    const channelName = `mensajes_chat_${conversationId}_${Date.now()}`;
     
     messagesSubscription = supabase
         .channel(channelName)
@@ -1030,25 +1050,28 @@ function subscribeToMessages(conversationId) {
                 filter: `conversacion_id=eq.${conversationId}`
             },
             (payload) => {
-                console.log('✅ Nuevo mensaje recibido:', payload);
+                console.log('✅ Mensaje en chat actual:', payload);
                 
-                // Agregar mensaje solo si no es del usuario actual
+                // Agregar mensaje si no es del usuario actual
                 if (payload.new && payload.new.remitente_id != currentUser.id) {
                     addNewMessageToUI(payload.new);
-                    playNotificationSound();
                     
-                    // Marcar como leído inmediatamente si el chat está abierto
-                    markMessagesAsRead(conversationId);
-                } else if (payload.new && payload.new.remitente_id == currentUser.id) {
-                    // Si es el usuario actual, solo actualizar la UI sin sonido
-                    // (ya se agregó con optimistic update)
+                    // IMPORTANTE: Solo marcar como leído si el chat está visible
+                    const chatScreen = document.getElementById('chatScreen');
+                    if (chatScreen && !chatScreen.classList.contains('hidden')) {
+                        // El usuario está viendo el chat, marcar como leído
+                        setTimeout(() => {
+                            markMessagesAsRead(conversationId);
+                        }, 500);
+                    }
+                    // Si el chat no está visible, NO marcar como leído
                 }
             }
         )
         .subscribe((status) => {
-            console.log('Estado de suscripción:', status);
+            console.log('Estado de suscripción del chat:', status);
             if (status === 'SUBSCRIBED') {
-                console.log('✅ Suscrito exitosamente a mensajes en tiempo real');
+                console.log('✅ Suscrito a mensajes del chat actual');
             }
         });
 }
@@ -1388,9 +1411,14 @@ function displayChatList(chatList, conversations) {
         
         chatItem.onclick = () => {
             currentChat = chat;
-            markMessagesAsRead(chat.id);
-            loadChatList();
+            
+            // Primero cargar el chat
             loadChatMessages();
+            
+            // IMPORTANTE: Marcar como leído DESPUÉS de cargar los mensajes
+            setTimeout(() => {
+                markMessagesAsRead(chat.id);
+            }, 1000);
             
             document.getElementById('currentChatTitle').innerText = 
                 `Chat: ${chat.jobTitle} - ${chat.otherUserName}`;
@@ -1413,8 +1441,14 @@ async function markMessagesAsRead(conversationId) {
         if (error) {
             console.error('Error al marcar mensajes como leídos:', error);
         } else {
-            // Recargar la lista de chats para actualizar contadores
-            setTimeout(() => loadChatList(), 500);
+            console.log('✅ Mensajes marcados como leídos');
+            // Recargar contadores
+            loadUnreadCounts();
+            
+            // Si estamos en la pantalla de chat, recargar la lista después de un momento
+            if (!document.getElementById('chatScreen').classList.contains('hidden')) {
+                setTimeout(() => loadChatList(), 300);
+            }
         }
     } catch (error) {
         console.error('Error al marcar como leído:', error);
