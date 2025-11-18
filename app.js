@@ -909,26 +909,101 @@ function setupRealtimeSubscriptions() {
         supabase.removeChannel(conversationsSubscription);
     }
     
-    // Suscribirse a cambios en conversaciones
+    console.log('Configurando suscripciones en tiempo real para usuario:', currentUser.id);
+    
+    // Suscribirse a TODOS los mensajes nuevos en tiempo real
     conversationsSubscription = supabase
-        .channel('conversaciones_channel')
+        .channel('all_messages_global')
         .on(
             'postgres_changes',
             {
-                event: '*',
+                event: 'INSERT',
                 schema: 'public',
-                table: 'conversaciones',
-                filter: `usuario1_id=eq.${currentUser.id},usuario2_id=eq.${currentUser.id}`
+                table: 'mensajes'
             },
-            (payload) => {
-                console.log('Cambio en conversaciones:', payload);
-                // Si estamos en la pantalla de chat, recargar la lista
-                if (!document.getElementById('chatScreen').classList.contains('hidden')) {
-                    loadChatList();
+            async (payload) => {
+                console.log('🔔 Nuevo mensaje detectado:', payload);
+                
+                // Verificar si este mensaje es para una conversación del usuario actual
+                const { data: conv, error } = await supabase
+                    .from('conversaciones')
+                    .select('*')
+                    .eq('id', payload.new.conversacion_id)
+                    .or(`usuario1_id.eq.${currentUser.id},usuario2_id.eq.${currentUser.id}`)
+                    .single();
+                
+                if (error || !conv) {
+                    console.log('Mensaje no es para este usuario');
+                    return;
+                }
+                
+                // Si el mensaje NO es del usuario actual
+                if (payload.new.remitente_id != currentUser.id) {
+                    console.log('✅ Mensaje recibido de otro usuario');
+                    
+                    // Reproducir sonido
+                    playNotificationSound();
+                    
+                    // Incrementar contador global
+                    totalUnreadMessages++;
+                    updateUnreadBadge();
+                    
+                    // Si estamos en la pantalla de chats, recargar la lista
+                    if (!document.getElementById('chatScreen').classList.contains('hidden')) {
+                        loadChatList();
+                    }
+                    
+                    // Si el chat actual está abierto y es este chat, agregar el mensaje
+                    if (currentChat && currentChat.id === payload.new.conversacion_id) {
+                        // Ya se agregó con la otra suscripción, solo marcar como leído
+                        markMessagesAsRead(currentChat.id);
+                    }
                 }
             }
         )
-        .subscribe();
+        .subscribe((status) => {
+            console.log('Estado de suscripción global:', status);
+            if (status === 'SUBSCRIBED') {
+                console.log('✅ Suscrito a todos los mensajes en tiempo real');
+            }
+        });
+    
+    // Cargar contadores iniciales
+    loadUnreadCounts();
+}
+
+// Cargar contadores de mensajes no leídos sin abrir la pantalla de chat
+async function loadUnreadCounts() {
+    try {
+        // Contar TODOS los mensajes no leídos del usuario
+        const { data: conversations, error: convError } = await supabase
+            .from('conversaciones')
+            .select('id')
+            .or(`usuario1_id.eq.${currentUser.id},usuario2_id.eq.${currentUser.id}`);
+        
+        if (convError) throw convError;
+        
+        if (conversations && conversations.length > 0) {
+            const convIds = conversations.map(c => c.id);
+            
+            // Contar mensajes no leídos en todas las conversaciones
+            const { count, error: countError } = await supabase
+                .from('mensajes')
+                .select('*', { count: 'exact', head: true })
+                .in('conversacion_id', convIds)
+                .eq('leido', 0)
+                .neq('remitente_id', currentUser.id);
+            
+            if (countError) throw countError;
+            
+            totalUnreadMessages = count || 0;
+            updateUnreadBadge();
+            
+            console.log(`Total de mensajes no leídos: ${totalUnreadMessages}`);
+        }
+    } catch (error) {
+        console.error('Error al cargar contadores:', error);
+    }
 }
 
 // Suscribirse a mensajes de una conversación específica
@@ -961,6 +1036,12 @@ function subscribeToMessages(conversationId) {
                 if (payload.new && payload.new.remitente_id != currentUser.id) {
                     addNewMessageToUI(payload.new);
                     playNotificationSound();
+                    
+                    // Marcar como leído inmediatamente si el chat está abierto
+                    markMessagesAsRead(conversationId);
+                } else if (payload.new && payload.new.remitente_id == currentUser.id) {
+                    // Si es el usuario actual, solo actualizar la UI sin sonido
+                    // (ya se agregó con optimistic update)
                 }
             }
         )
@@ -1290,14 +1371,24 @@ function displayChatList(chatList, conversations) {
         
         const time = chat.lastMessageDate ? formatTime(chat.lastMessageDate) : '';
         
+        // Agregar badge si hay mensajes no leídos
+        const badgeHtml = chat.unreadCount > 0 ? 
+            `<span class="chat-badge">${chat.unreadCount > 99 ? '99+' : chat.unreadCount}</span>` : '';
+        
         chatItem.innerHTML = `
-            <div class="chat-title">${escapeHtml(chat.jobTitle)} - ${escapeHtml(chat.otherUserName)}</div>
-            <div class="chat-preview">${escapeHtml(lastMsg)}</div>
-            <div class="chat-time">${time}</div>
+            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                <div style="flex: 1;">
+                    <div class="chat-title">${escapeHtml(chat.jobTitle)} - ${escapeHtml(chat.otherUserName)}</div>
+                    <div class="chat-preview">${escapeHtml(lastMsg)}</div>
+                    <div class="chat-time">${time}</div>
+                </div>
+                ${badgeHtml}
+            </div>
         `;
         
         chatItem.onclick = () => {
             currentChat = chat;
+            markMessagesAsRead(chat.id);
             loadChatList();
             loadChatMessages();
             
@@ -1307,6 +1398,27 @@ function displayChatList(chatList, conversations) {
         
         chatList.appendChild(chatItem);
     });
+}
+
+// Marcar mensajes como leídos cuando se abre un chat
+async function markMessagesAsRead(conversationId) {
+    try {
+        const { error } = await supabase
+            .from('mensajes')
+            .update({ leido: 1 })
+            .eq('conversacion_id', conversationId)
+            .eq('leido', 0)
+            .neq('remitente_id', currentUser.id);
+        
+        if (error) {
+            console.error('Error al marcar mensajes como leídos:', error);
+        } else {
+            // Recargar la lista de chats para actualizar contadores
+            setTimeout(() => loadChatList(), 500);
+        }
+    } catch (error) {
+        console.error('Error al marcar como leído:', error);
+    }
 }
 
 async function loadChatMessages(){
