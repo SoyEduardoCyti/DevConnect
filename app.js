@@ -116,8 +116,17 @@ function setupUserPermissions() {
             }
         });
     }
+
+    if (isEmployer) {
+        const addJobBtn = document.querySelector('[onclick="showAddJob()"]');
+        if (addJobBtn) addJobBtn.style.display = '';
+        
+        const tabs = document.querySelectorAll('.tab');
+        tabs.forEach(tab => tab.style.display = '');
+     }
+}
             // Función para actualizar la navegación activa
-        function updateActiveNav(section) {
+            function updateActiveNav(section) {
             // Remover clase active de todos los nav-items
             document.querySelectorAll('.nav-item').forEach(item => {
                 item.classList.remove('active');
@@ -130,15 +139,6 @@ function setupUserPermissions() {
                 document.getElementById('navChats')?.classList.add('active');
             }
         }
-    
-    if (isEmployer) {
-        const addJobBtn = document.querySelector('[onclick="showAddJob()"]');
-        if (addJobBtn) addJobBtn.style.display = '';
-        
-        const tabs = document.querySelectorAll('.tab');
-        tabs.forEach(tab => tab.style.display = '');
-    }
-}
 
 // Mostrar la interfaz para usuarios autenticados
 async function showAuthenticatedUI() {
