@@ -127,7 +127,7 @@ function setupUserPermissions() {
 }
 
 // Mostrar la interfaz para usuarios autenticados
-function showAuthenticatedUI() {
+async function showAuthenticatedUI() {
     document.getElementById('homeScreen').classList.add('hidden');
     document.getElementById('loginScreen').classList.add('hidden');
     document.getElementById('registerOptionsScreen').classList.add('hidden');
@@ -143,11 +143,12 @@ function showAuthenticatedUI() {
     updateActiveNav('dashboard');
     
     // IMPORTANTE: Cargar contadores de mensajes no leídos al iniciar
-    loadUnreadCounts();
+    await loadUnreadCounts();
     
     // Configurar suscripciones en tiempo real
     setupRealtimeSubscriptions();
     
+    // Mostrar dashboard con contenido
     showDashboard();
 }
 
@@ -710,6 +711,9 @@ function switchTab(tabName) {
 }
 
 function loadContent(){
+    console.log('loadContent llamado, activeTab:', activeTab);
+    console.log('currentUser:', currentUser);
+    
     if (activeTab === 'developers') {
         loadDevelopers();
     } else {
