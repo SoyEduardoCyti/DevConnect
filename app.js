@@ -116,6 +116,20 @@ function setupUserPermissions() {
             }
         });
     }
+            // Función para actualizar la navegación activa
+        function updateActiveNav(section) {
+            // Remover clase active de todos los nav-items
+            document.querySelectorAll('.nav-item').forEach(item => {
+                item.classList.remove('active');
+            });
+            
+            // Agregar clase active al nav-item correspondiente
+            if (section === 'dashboard') {
+                document.getElementById('navDashboard')?.classList.add('active');
+            } else if (section === 'chats') {
+                document.getElementById('navChats')?.classList.add('active');
+            }
+        }
     
     if (isEmployer) {
         const addJobBtn = document.querySelector('[onclick="showAddJob()"]');
@@ -151,6 +165,8 @@ async function showAuthenticatedUI() {
     // Mostrar dashboard con contenido
     showDashboard();
 }
+
+
 
 // Mostrar la interfaz para usuarios no autenticados
 function showUnauthenticatedUI() {
