@@ -41,8 +41,6 @@ document.addEventListener('DOMContentLoaded', function() {
         currentUser = JSON.parse(savedUser);
         isAuthenticated = true;
         showAuthenticatedUI();
-        // Iniciar suscripciones en tiempo real
-        setupRealtimeSubscriptions();
     } else {
         isAuthenticated = false;
         showUnauthenticatedUI();
@@ -143,6 +141,12 @@ function showAuthenticatedUI() {
     
     // Actualizar navegación activa al inicio
     updateActiveNav('dashboard');
+    
+    // IMPORTANTE: Cargar contadores de mensajes no leídos al iniciar
+    loadUnreadCounts();
+    
+    // Configurar suscripciones en tiempo real
+    setupRealtimeSubscriptions();
     
     showDashboard();
 }
