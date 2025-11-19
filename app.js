@@ -125,20 +125,21 @@ function setupUserPermissions() {
         tabs.forEach(tab => tab.style.display = '');
      }
 }
-            // Función para actualizar la navegación activa
-            function updateActiveNav(section) {
-            // Remover clase active de todos los nav-items
-            document.querySelectorAll('.nav-item').forEach(item => {
-                item.classList.remove('active');
-            });
-            
-            // Agregar clase active al nav-item correspondiente
-            if (section === 'dashboard') {
-                document.getElementById('navDashboard')?.classList.add('active');
-            } else if (section === 'chats') {
-                document.getElementById('navChats')?.classList.add('active');
-            }
-        }
+
+// Función para actualizar la navegación activa
+function updateActiveNav(section) {
+    // Remover clase active de todos los nav-items
+    document.querySelectorAll('.nav-item').forEach(item => {
+        item.classList.remove('active');
+    });
+    
+    // Agregar clase active al nav-item correspondiente
+    if (section === 'dashboard') {
+        document.getElementById('navDashboard')?.classList.add('active');
+    } else if (section === 'chats') {
+        document.getElementById('navChats')?.classList.add('active');
+    }
+}
 
 // Mostrar la interfaz para usuarios autenticados
 async function showAuthenticatedUI() {
@@ -165,8 +166,6 @@ async function showAuthenticatedUI() {
     // Mostrar dashboard con contenido
     showDashboard();
 }
-
-
 
 // Mostrar la interfaz para usuarios no autenticados
 function showUnauthenticatedUI() {
@@ -281,6 +280,9 @@ function showDashboard(){
     document.getElementById('dashboardScreen').classList.remove('hidden');
     updatePageTitle('Dashboard');
     
+    // Actualizar navegación activa
+    updateActiveNav('dashboard');
+    
     loadContent();
 }
 
@@ -302,20 +304,31 @@ function showAddJob(){
     updatePageTitle('Agregar Oferta');
 }
 
+// ✅ FUNCIÓN CORREGIDA #5
 function showChats(){
     if (!isAuthenticated) {
         showHome();
         return;
     }
     
+    // Cancelar suscripción de mensajes del chat cuando sales
+    if (messagesSubscription) {
+        supabase.removeChannel(messagesSubscription);
+        messagesSubscription = null;
+        console.log('Suscripción de chat cancelada al salir');
+    }
+    
     hideAllScreens();
     document.getElementById('chatScreen').classList.remove('hidden');
     updatePageTitle('Mensajes');
     
+    // Actualizar navegación activa
+    updateActiveNav('chats');
+    
     // Cargar la lista de chats
     loadChatList();
     
-    // Si hay un chat abierto, marcar sus mensajes como leídos
+    // Solo marcar como leído si HAY un chat actualmente seleccionado
     if (currentChat) {
         setTimeout(() => {
             markMessagesAsRead(currentChat.id);
@@ -946,7 +959,7 @@ function contactDeveloper(devId) {
     openChat(chatJob.id, devId, 'Contacto directo');
 }
 
-// Configurar suscripciones en tiempo real
+// ✅ FUNCIÓN CORREGIDA #1 - setupRealtimeSubscriptions
 function setupRealtimeSubscriptions() {
     // Cancelar suscripciones anteriores si existen
     if (conversationsSubscription) {
@@ -966,7 +979,7 @@ function setupRealtimeSubscriptions() {
                 table: 'mensajes'
             },
             async (payload) => {
-                console.log('🔔 Nuevo mensaje detectado:', payload);
+                console.log('📩 Nuevo mensaje detectado:', payload);
                 
                 // Verificar si este mensaje es para una conversación del usuario actual
                 const { data: conv, error } = await supabase
@@ -992,15 +1005,19 @@ function setupRealtimeSubscriptions() {
                     totalUnreadMessages++;
                     updateUnreadBadge();
                     
-                    // Si estamos en la pantalla de chats, recargar la lista
+                    // Si estamos en la pantalla de chats, recargar la lista SIN MARCAR COMO LEÍDO
                     if (!document.getElementById('chatScreen').classList.contains('hidden')) {
-                        loadChatList();
+                        loadChatListSilently();
                     }
                     
-                    // Si el chat actual está abierto y es este chat, agregar el mensaje
+                    // Si el chat actual está abierto Y es este chat, agregar el mensaje
                     if (currentChat && currentChat.id === payload.new.conversacion_id) {
-                        // Ya se agregó con la otra suscripción, solo marcar como leído
-                        markMessagesAsRead(currentChat.id);
+                        const chatScreen = document.getElementById('chatScreen');
+                        if (chatScreen && !chatScreen.classList.contains('hidden')) {
+                            setTimeout(() => {
+                                markMessagesAsRead(currentChat.id);
+                            }, 500);
+                        }
                     }
                 }
             }
@@ -1012,14 +1029,78 @@ function setupRealtimeSubscriptions() {
             }
         });
     
-    // Cargar contadores iniciales
     loadUnreadCounts();
+}
+
+// ✅ FUNCIÓN NUEVA #2 - loadChatListSilently
+async function loadChatListSilently() {
+    const chatList = document.getElementById('chatList');
+    
+    try {
+        const { data: conversations, error } = await supabase
+            .from('conversaciones')
+            .select(`
+                *,
+                ofertas_trabajo(titulo),
+                usuario1:usuarios!conversaciones_usuario1_id_fkey(nombres, apellidos),
+                usuario2:usuarios!conversaciones_usuario2_id_fkey(nombres, apellidos)
+            `)
+            .or(`usuario1_id.eq.${currentUser.id},usuario2_id.eq.${currentUser.id}`)
+            .order('ultimo_mensaje', { ascending: false, nullsFirst: false });
+        
+        if (error) {
+            console.error('Error al cargar conversaciones:', error);
+            throw error;
+        }
+        
+        if (conversations && conversations.length > 0) {
+            const formattedConvs = await Promise.all(conversations.map(async conv => {
+                const otherUser = conv.usuario1_id === currentUser.id ? conv.usuario2 : conv.usuario1;
+                
+                const { count, error: countError } = await supabase
+                    .from('mensajes')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('conversacion_id', conv.id)
+                    .eq('leido', 0)
+                    .neq('remitente_id', currentUser.id);
+                
+                return {
+                    id: conv.id,
+                    jobTitle: conv.ofertas_trabajo?.titulo || 'Chat directo',
+                    otherUserName: `${otherUser.nombres} ${otherUser.apellidos}`,
+                    otherUserId: conv.usuario1_id === currentUser.id ? conv.usuario2_id : conv.usuario1_id,
+                    lastMessage: '',
+                    lastMessageDate: conv.ultimo_mensaje,
+                    unreadCount: count || 0
+                };
+            }));
+            
+            // Ordenar por fecha descendente (más recientes primero)
+            formattedConvs.sort((a, b) => {
+                const dateA = a.lastMessageDate ? new Date(a.lastMessageDate) : new Date(0);
+                const dateB = b.lastMessageDate ? new Date(b.lastMessageDate) : new Date(0);
+                return dateB - dateA;
+            });
+            
+            totalUnreadMessages = formattedConvs.reduce((sum, conv) => sum + conv.unreadCount, 0);
+            updateUnreadBadge();
+            
+            const currentScrollPosition = chatList.scrollTop;
+            displayChatList(chatList, formattedConvs);
+            chatList.scrollTop = currentScrollPosition;
+        } else {
+            chatList.innerHTML = '<p>No tienes conversaciones activas.</p>';
+            totalUnreadMessages = 0;
+            updateUnreadBadge();
+        }
+    } catch (error) {
+        console.error('Error completo:', error);
+    }
 }
 
 // Cargar contadores de mensajes no leídos sin abrir la pantalla de chat
 async function loadUnreadCounts() {
     try {
-        // Contar TODOS los mensajes no leídos del usuario
         const { data: conversations, error: convError } = await supabase
             .from('conversaciones')
             .select('id')
@@ -1030,7 +1111,6 @@ async function loadUnreadCounts() {
         if (conversations && conversations.length > 0) {
             const convIds = conversations.map(c => c.id);
             
-            // Contar mensajes no leídos en todas las conversaciones
             const { count, error: countError } = await supabase
                 .from('mensajes')
                 .select('*', { count: 'exact', head: true })
@@ -1052,7 +1132,6 @@ async function loadUnreadCounts() {
 
 // Suscribirse a mensajes de una conversación específica
 function subscribeToMessages(conversationId) {
-    // Cancelar suscripción anterior si existe
     if (messagesSubscription) {
         supabase.removeChannel(messagesSubscription);
         messagesSubscription = null;
@@ -1060,7 +1139,6 @@ function subscribeToMessages(conversationId) {
     
     console.log('Suscribiéndose a mensajes de conversación:', conversationId);
     
-    // Crear canal único para esta conversación
     const channelName = `mensajes_chat_${conversationId}_${Date.now()}`;
     
     messagesSubscription = supabase
@@ -1076,19 +1154,15 @@ function subscribeToMessages(conversationId) {
             (payload) => {
                 console.log('✅ Mensaje en chat actual:', payload);
                 
-                // Agregar mensaje si no es del usuario actual
                 if (payload.new && payload.new.remitente_id != currentUser.id) {
                     addNewMessageToUI(payload.new);
                     
-                    // IMPORTANTE: Solo marcar como leído si el chat está visible
                     const chatScreen = document.getElementById('chatScreen');
                     if (chatScreen && !chatScreen.classList.contains('hidden')) {
-                        // El usuario está viendo el chat, marcar como leído
                         setTimeout(() => {
                             markMessagesAsRead(conversationId);
                         }, 500);
                     }
-                    // Si el chat no está visible, NO marcar como leído
                 }
             }
         )
@@ -1104,7 +1178,6 @@ function subscribeToMessages(conversationId) {
 function addNewMessageToUI(message) {
     const div = document.getElementById('chatMessages');
     
-    // Crear el elemento del mensaje
     const msgContainer = document.createElement('div');
     msgContainer.className = `message ${message.remitente_id == currentUser.id ? 'user' : 'other'} fade-in`;
     
@@ -1120,7 +1193,6 @@ function addNewMessageToUI(message) {
     msgContainer.appendChild(timeDiv);
     div.appendChild(msgContainer);
     
-    // Scroll automático al final
     div.scrollTop = div.scrollHeight;
 }
 
@@ -1324,13 +1396,12 @@ function clearFilters() {
     loadDevelopers();
 }
 
-// Funciones de chat
+// ✅ FUNCIÓN CORREGIDA #3 - loadChatList
 async function loadChatList(){
     const chatList = document.getElementById('chatList');
     chatList.innerHTML = '<p>Cargando conversaciones...</p>';
     
     try {
-        // Cargar conversaciones donde el usuario participa (usuario1_id O usuario2_id)
         const { data: conversations, error } = await supabase
             .from('conversaciones')
             .select(`
@@ -1348,11 +1419,9 @@ async function loadChatList(){
         }
         
         if (conversations && conversations.length > 0) {
-            // Cargar mensajes no leídos para cada conversación
             const formattedConvs = await Promise.all(conversations.map(async conv => {
                 const otherUser = conv.usuario1_id === currentUser.id ? conv.usuario2 : conv.usuario1;
                 
-                // Contar mensajes no leídos (mensajes donde el remitente NO es el usuario actual y leido = 0)
                 const { count, error: countError } = await supabase
                     .from('mensajes')
                     .select('*', { count: 'exact', head: true })
@@ -1371,7 +1440,13 @@ async function loadChatList(){
                 };
             }));
             
-            // Calcular total de mensajes no leídos
+            // Ordenar por fecha descendente (más recientes primero)
+            formattedConvs.sort((a, b) => {
+                const dateA = a.lastMessageDate ? new Date(a.lastMessageDate) : new Date(0);
+                const dateB = b.lastMessageDate ? new Date(b.lastMessageDate) : new Date(0);
+                return dateB - dateA;
+            });
+            
             totalUnreadMessages = formattedConvs.reduce((sum, conv) => sum + conv.unreadCount, 0);
             updateUnreadBadge();
             
@@ -1418,7 +1493,6 @@ function displayChatList(chatList, conversations) {
         
         const time = chat.lastMessageDate ? formatTime(chat.lastMessageDate) : '';
         
-        // Agregar badge si hay mensajes no leídos
         const badgeHtml = chat.unreadCount > 0 ? 
             `<span class="chat-badge">${chat.unreadCount > 99 ? '99+' : chat.unreadCount}</span>` : '';
         
@@ -1435,11 +1509,8 @@ function displayChatList(chatList, conversations) {
         
         chatItem.onclick = () => {
             currentChat = chat;
-            
-            // Primero cargar el chat
             loadChatMessages();
             
-            // IMPORTANTE: Marcar como leído DESPUÉS de cargar los mensajes
             setTimeout(() => {
                 markMessagesAsRead(chat.id);
             }, 1000);
@@ -1452,7 +1523,7 @@ function displayChatList(chatList, conversations) {
     });
 }
 
-// Marcar mensajes como leídos cuando se abre un chat
+// ✅ FUNCIÓN CORREGIDA #4 - markMessagesAsRead
 async function markMessagesAsRead(conversationId) {
     try {
         const { error } = await supabase
@@ -1466,12 +1537,10 @@ async function markMessagesAsRead(conversationId) {
             console.error('Error al marcar mensajes como leídos:', error);
         } else {
             console.log('✅ Mensajes marcados como leídos');
-            // Recargar contadores
             loadUnreadCounts();
             
-            // Si estamos en la pantalla de chat, recargar la lista después de un momento
             if (!document.getElementById('chatScreen').classList.contains('hidden')) {
-                setTimeout(() => loadChatList(), 300);
+                setTimeout(() => loadChatListSilently(), 300);
             }
         }
     } catch (error) {
@@ -1488,7 +1557,6 @@ async function loadChatMessages(){
         return;
     }
     
-    // Suscribirse a mensajes en tiempo real de esta conversación
     subscribeToMessages(currentChat.id);
     
     try {
@@ -1504,7 +1572,6 @@ async function loadChatMessages(){
         let lastDate = null;
         
         messages.forEach(msg => {
-            // Convertir a fecha local de México
             const msgDate = new Date(msg.fecha_envio);
             const mexicoDate = new Date(msgDate.toLocaleString('en-US', { timeZone: 'America/Mexico_City' }));
             
@@ -1572,7 +1639,6 @@ function formatMessageTime(timestamp) {
     
     const date = new Date(timestamp);
     
-    // Formatear en zona horaria de México
     return date.toLocaleTimeString('es-MX', { 
         hour: '2-digit', 
         minute: '2-digit',
@@ -1592,23 +1658,19 @@ async function sendMessage(){
     
     if(!messageText) return;
     
-    // Limpiar el input inmediatamente
     input.value = '';
     
-    // Crear el mensaje
     const newMessage = {
         conversacion_id: currentChat.id,
         remitente_id: currentUser.id,
         mensaje: messageText,
-        fecha_envio: new Date().toISOString(), // Usar ISO directo
+        fecha_envio: new Date().toISOString(),
         leido: 0
     };
     
-    // Agregar a la UI inmediatamente (optimistic update)
     addNewMessageToUI(newMessage);
     
     try {
-        // Enviar a la base de datos
         const { error: msgError } = await supabase
             .from('mensajes')
             .insert([newMessage]);
@@ -1620,7 +1682,6 @@ async function sendMessage(){
         
         console.log('✅ Mensaje enviado exitosamente');
         
-        // Actualizar última fecha de mensaje en conversación
         await supabase
             .from('conversaciones')
             .update({
@@ -1631,18 +1692,15 @@ async function sendMessage(){
     } catch (error) {
         console.error('Error completo:', error);
         alert('Error al enviar mensaje: ' + error.message);
-        // Recargar mensajes en caso de error
         loadChatMessages();
     }
 }
 
 async function openChat(jobId, otherUserId, jobTitle){
     try {
-        // Si jobId es temporal (string que empieza con 'contact_'), usar null
         const isDirectContact = typeof jobId === 'string' && jobId.startsWith('contact_');
         const actualJobId = isDirectContact ? null : jobId;
         
-        // Buscar conversación existente
         let query = supabase
             .from('conversaciones')
             .select('*');
@@ -1652,7 +1710,6 @@ async function openChat(jobId, otherUserId, jobTitle){
                 .eq('oferta_id', actualJobId)
                 .or(`and(usuario1_id.eq.${currentUser.id},usuario2_id.eq.${otherUserId}),and(usuario1_id.eq.${otherUserId},usuario2_id.eq.${currentUser.id})`);
         } else {
-            // Buscar chat directo sin oferta específica
             query = query
                 .is('oferta_id', null)
                 .or(`and(usuario1_id.eq.${currentUser.id},usuario2_id.eq.${otherUserId}),and(usuario1_id.eq.${otherUserId},usuario2_id.eq.${currentUser.id})`);
