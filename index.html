@@ -156,14 +156,16 @@
                                 <input class="form-control" id="regUsername" type="text" required />
                             </div>
                             
-                            <div class="form-group">
-                                <label class="form-label" for="regPassword">Contraseña</label>
-                                <div class="password-input-container">
-                                    <input class="form-control" id="regPassword" type="password" required oninput="checkPasswordStrength()" />
-                                    <button type="button" class="toggle-password" onclick="togglePasswordVisibility('regPassword')">
-                                        <i class="fas fa-eye"></i>
-                                    </button>
-                                </div>
+                        <div class="form-group">
+                            <label class="form-label" for="regPassword">Contraseña (máx 12)</label>
+                            <div class="password-input-container">
+                                <input class="form-control" id="regPassword" type="password" maxlength="12" required oninput="checkPasswordStrength(); updateCharCounter('regPassword', 'passCounter', 12)" />
+                                <button type="button" class="toggle-password" onclick="togglePasswordVisibility('regPassword')">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                            </div>
+                        <div class="char-counter" id="passCounter">0/12</div>
+                    </div>
                                 
                                 <div class="password-requirements">
                                     <div class="requirement invalid" id="req-length">
@@ -193,14 +195,15 @@
                                 </div>
                             </div>
                             
-                            <div class="form-group confirm-password">
-                                <label class="form-label" for="regConfirmPassword">Confirmar Contraseña</label>
-                                <div class="password-input-container">
-                                    <input class="form-control" id="regConfirmPassword" type="password" required oninput="checkPasswordMatch()" />
-                                    <button type="button" class="toggle-password" onclick="togglePasswordVisibility('regConfirmPassword')">
-                                        <i class="fas fa-eye"></i>
-                                    </button>
-                                </div>
+                                <div class="form-group confirm-password">
+                                    <label class="form-label" for="regConfirmPassword">Confirmar Contraseña (máx 12)</label>
+                                    <div class="password-input-container">
+                                        <input class="form-control" id="regConfirmPassword" type="password" maxlength="12" required oninput="checkPasswordMatch(); updateCharCounter('regConfirmPassword', 'confirmCounter', 12)" />
+                                        <button type="button" class="toggle-password" onclick="togglePasswordVisibility('regConfirmPassword')">
+                                            <i class="fas fa-eye"></i>
+                                        </button>
+                                    </div>
+                                    <div class="char-counter" id="confirmCounter">0/12</div>
                                 <div class="password-match invalid" id="password-match">
                                     Las contraseñas deben coincidir
                                 </div>
@@ -208,12 +211,15 @@
                             
                             <div class="form-group">
                                 <label class="form-label" for="regFirstName">Nombres</label>
-                                <input class="form-control" id="regFirstName" type="text" required />
+                                <input class="form-control" id="regFirstName" type="text" maxlength="35" required oninput="updateCharCounter('regFirstName', 'nameCounter', 35)" />
+                                <div class="char-counter" id="nameCounter">0/35</div>
                             </div>
-                            <div class="form-group">
-                                <label class="form-label" for="regLastName">Apellidos</label>
-                                <input class="form-control" id="regLastName" type="text" required />
-                            </div>
+                            
+                                <div class="form-group">
+                                    <label class="form-label" for="regLastName">Apellidos (máx 35)</label>
+                                    <input class="form-control" id="regLastName" type="text" maxlength="35" required oninput="updateCharCounter('regLastName', 'lastNameCounter', 35)" />
+                                    <div class="char-counter" id="lastNameCounter">0/35</div>
+                                </div>
                             <div class="form-group">
                                 <label class="form-label" for="regBirthDate">Fecha de Nacimiento</label>
                                 <input class="form-control" id="regBirthDate" type="date" required />
