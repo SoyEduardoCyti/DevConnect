@@ -1117,20 +1117,3 @@ textarea.form-control {
     position: relative;
 }
 
-/* Contador de caracteres */
-.char-counter {
-    font-size: 0.75rem;
-    color: var(--gray-500);
-    margin-top: 0.25rem;
-    text-align: right;
-}
-
-.char-counter.warning {
-    color: var(--warning);
-    font-weight: 600;
-}
-
-.char-counter.danger {
-    color: var(--error);
-    font-weight: 700;
-}

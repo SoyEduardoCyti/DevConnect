@@ -1782,23 +1782,3 @@ document.addEventListener('click', function(e) {
     }
 });
 
-// Función para actualizar contador de caracteres
-function updateCharCounter(inputId, counterId, maxLength) {
-    const input = document.getElementById(inputId);
-    const counter = document.getElementById(counterId);
-    
-    if (!counter) return;
-    
-    const currentLength = input.value.length;
-    counter.textContent = `${currentLength}/${maxLength}`;
-    
-    counter.classList.remove('warning', 'danger');
-    
-    const percentage = (currentLength / maxLength) * 100;
-    
-    if (percentage >= 100) {
-        counter.classList.add('danger');
-    } else if (percentage >= 80) {
-        counter.classList.add('warning');
-    }
-}
