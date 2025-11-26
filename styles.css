@@ -56,6 +56,12 @@ html, body {
     flex-direction: column;
     box-shadow: 4px 0 20px rgba(0, 0, 0, 0.1);
     z-index: 10;
+
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    overflow-y: auto;
 }
 
 .logo {
@@ -169,6 +175,7 @@ html, body {
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    margin-left: var(--sidebar-width);
 }
 
 .header {
@@ -427,9 +434,14 @@ html, body {
 
 .job-tags, .developer-skills {
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     gap: 0.5rem;
     margin-bottom: 1rem;
+     overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 0.5rem;
+    scrollbar-width: thin;
+    scrollbar-color: var(--gray-300) transparent;
 }
 
 .tag {
@@ -1117,3 +1129,41 @@ textarea.form-control {
     position: relative;
 }
 
+/* Contador de caracteres */
+.char-counter {
+    font-size: 0.75rem;
+    color: var(--gray-500);
+    text-align: right;
+    margin-top: 0.25rem;
+}
+
+.char-counter.warning {
+    color: var(--warning);
+}
+
+.char-counter.error {
+    color: var(--error);
+    font-weight: 600;
+}
+
+/* ✅ AGREGAR ESTO AL FINAL DEL ARCHIVO */
+.job-tags::-webkit-scrollbar,
+.developer-skills::-webkit-scrollbar {
+    height: 6px;
+}
+
+.job-tags::-webkit-scrollbar-track,
+.developer-skills::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.job-tags::-webkit-scrollbar-thumb,
+.developer-skills::-webkit-scrollbar-thumb {
+    background: var(--gray-300);
+    border-radius: 3px;
+}
+
+.job-tags::-webkit-scrollbar-thumb:hover,
+.developer-skills::-webkit-scrollbar-thumb:hover {
+    background: var(--gray-400);
+}
