@@ -33,49 +33,6 @@ let isAuthenticated = false;
 const TIPO_EMPLEADOR = 1;
 const TIPO_DESARROLLADOR = 2;
 
-
-// Función para agregar contador de caracteres
-function addCharCounter(inputId, maxLength) {
-    const input = document.getElementById(inputId);
-    if (!input) return;
-    
-    const counter = document.createElement('div');
-    counter.className = 'char-counter';
-    counter.id = inputId + 'Counter';
-    input.parentNode.appendChild(counter);
-    
-    const updateCounter = () => {
-        const length = input.value.length;
-        counter.textContent = `${length}/${maxLength}`;
-        
-        if (length >= maxLength) {
-            counter.classList.add('error');
-            counter.classList.remove('warning');
-        } else if (length >= maxLength * 0.8) {
-            counter.classList.add('warning');
-            counter.classList.remove('error');
-        } else {
-            counter.classList.remove('warning', 'error');
-        }
-    };
-    
-    input.addEventListener('input', updateCounter);
-    updateCounter();
-}
-
-// Inicializar contadores cuando se muestre el registro
-function initCharCounters() {
-    addCharCounter('regPassword', 12);
-    addCharCounter('regConfirmPassword', 12);
-    addCharCounter('regFirstName', 35);
-    addCharCounter('regLastName', 35);
-    addCharCounter('regUsername', 20);
-    addCharCounter('regCompany', 50);
-    addCharCounter('jobTitle', 100);
-    addCharCounter('jobCompany', 50);
-    addCharCounter('jobDescription', 500);
-}
-
 // Inicializar la aplicación
 document.addEventListener('DOMContentLoaded', function() {
     const savedUser = localStorage.getItem('devconnect_user');
@@ -303,8 +260,6 @@ function showRegister(type){
     hideAllScreens();
     document.getElementById('registerScreen').classList.remove('hidden');
     updatePageTitle('Registro');
-
-     setTimeout(initCharCounters, 100);
 }
 
 // Funciones de navegación para usuarios autenticados
@@ -347,8 +302,6 @@ function showAddJob(){
     hideAllScreens();
     document.getElementById('addJobScreen').classList.remove('hidden');
     updatePageTitle('Agregar Oferta');
-
-      setTimeout(initCharCounters, 100);
 }
 
 // ✅ FUNCIÓN CORREGIDA #5
@@ -588,11 +541,6 @@ async function logout(){
     if (conversationsSubscription) {
         supabase.removeChannel(conversationsSubscription);
         conversationsSubscription = null;
-    }
-    
-     if (developersSubscription) {
-        supabase.removeChannel(developersSubscription);
-        developersSubscription = null;
     }
     
     currentUser = null;
@@ -1071,7 +1019,6 @@ function setupRealtimeSubscriptions() {
                             }, 500);
                         }
                     }
-                    
                 }
             }
         )
@@ -1083,42 +1030,7 @@ function setupRealtimeSubscriptions() {
         });
     
     loadUnreadCounts();
-
-    if (currentUser.tipo_id === TIPO_EMPLEADOR) {
-        if (developersSubscription) {
-            supabase.removeChannel(developersSubscription);
-        }
-        
-        developersSubscription = supabase
-            .channel('new_developers')
-            .on(
-                'postgres_changes',
-                {
-                    event: 'INSERT',
-                    schema: 'public',
-                    table: 'usuarios',
-                    filter: `tipo_id=eq.${TIPO_DESARROLLADOR}`
-                },
-                (payload) => {
-                    console.log('🆕 Nuevo desarrollador registrado:', payload);
-                    
-                    // Solo recargar si estamos en la pestaña de desarrolladores
-                    if (activeTab === 'developers' && !document.getElementById('dashboardScreen').classList.contains('hidden')) {
-                        setTimeout(() => {
-                            loadDevelopers();
-                        }, 1000);
-                    }
-                }
-            )
-            .subscribe((status) => {
-                console.log('Estado de suscripción de desarrolladores:', status);
-            });
-    }
-    
-    loadUnreadCounts();
 }
-
-
 
 // ✅ FUNCIÓN NUEVA #2 - loadChatListSilently
 async function loadChatListSilently() {
@@ -1689,6 +1601,10 @@ async function loadChatMessages(){
 function displayMessages(div, messages) {
     div.innerHTML = '';
     
+    if (!messages || messages.length === 0) {
+        div.innerHTML = '<p>No hay mensajes en esta conversación.</p>';
+        return;
+    }
     
     messages.forEach(msg => {
         if (msg.type === 'date_separator') {
