@@ -1782,3 +1782,249 @@ document.addEventListener('click', function(e) {
     }
 });
 
+// ============================================
+// AGREGAR AL FINAL DE app.js
+// ============================================
+
+// Límites de caracteres
+const CHARACTER_LIMITS = {
+    username: 12,
+    firstName: 35,
+    lastName: 35,
+    company: 50,
+    jobTitle: 100,
+    jobCompany: 50,
+    jobDescription: 500,
+    message: 500
+};
+
+// Función para validar longitud de campo
+function validateFieldLength(input, maxLength, counterElement) {
+    const currentLength = input.value.length;
+    const remaining = maxLength - currentLength;
+    
+    if (counterElement) {
+        counterElement.textContent = `${currentLength}/${maxLength}`;
+        
+        if (remaining < 0) {
+            counterElement.classList.add('limit-exceeded');
+            counterElement.classList.remove('limit-warning');
+            input.classList.add('input-error');
+        } else if (remaining <= 5) {
+            counterElement.classList.add('limit-warning');
+            counterElement.classList.remove('limit-exceeded');
+            input.classList.remove('input-error');
+        } else {
+            counterElement.classList.remove('limit-warning', 'limit-exceeded');
+            input.classList.remove('input-error');
+        }
+    }
+    
+    return currentLength <= maxLength;
+}
+
+// Función para truncar texto si excede el límite
+function enforceMaxLength(input, maxLength) {
+    if (input.value.length > maxLength) {
+        input.value = input.value.substring(0, maxLength);
+    }
+}
+
+// Inicializar validadores de campos
+function initializeFieldValidators() {
+    // Username
+    const usernameInputs = ['loginUsername', 'regUsername'];
+    usernameInputs.forEach(id => {
+        const input = document.getElementById(id);
+        if (input) {
+            input.setAttribute('maxlength', CHARACTER_LIMITS.username);
+            input.addEventListener('input', function() {
+                const counter = this.parentElement.querySelector('.char-counter');
+                if (counter) {
+                    validateFieldLength(this, CHARACTER_LIMITS.username, counter);
+                }
+            });
+        }
+    });
+    
+    // Nombres
+    const firstNameInput = document.getElementById('regFirstName');
+    if (firstNameInput) {
+        firstNameInput.setAttribute('maxlength', CHARACTER_LIMITS.firstName);
+        firstNameInput.addEventListener('input', function() {
+            const counter = this.parentElement.querySelector('.char-counter');
+            if (counter) {
+                validateFieldLength(this, CHARACTER_LIMITS.firstName, counter);
+            }
+        });
+    }
+    
+    // Apellidos
+    const lastNameInput = document.getElementById('regLastName');
+    if (lastNameInput) {
+        lastNameInput.setAttribute('maxlength', CHARACTER_LIMITS.lastName);
+        lastNameInput.addEventListener('input', function() {
+            const counter = this.parentElement.querySelector('.char-counter');
+            if (counter) {
+                validateFieldLength(this, CHARACTER_LIMITS.lastName, counter);
+            }
+        });
+    }
+    
+    // Empresa
+    const companyInput = document.getElementById('regCompany');
+    if (companyInput) {
+        companyInput.setAttribute('maxlength', CHARACTER_LIMITS.company);
+        companyInput.addEventListener('input', function() {
+            const counter = this.parentElement.querySelector('.char-counter');
+            if (counter) {
+                validateFieldLength(this, CHARACTER_LIMITS.company, counter);
+            }
+        });
+    }
+    
+    // Título de trabajo
+    const jobTitleInput = document.getElementById('jobTitle');
+    if (jobTitleInput) {
+        jobTitleInput.setAttribute('maxlength', CHARACTER_LIMITS.jobTitle);
+        jobTitleInput.addEventListener('input', function() {
+            const counter = this.parentElement.querySelector('.char-counter');
+            if (counter) {
+                validateFieldLength(this, CHARACTER_LIMITS.jobTitle, counter);
+            }
+        });
+    }
+    
+    // Empresa de trabajo
+    const jobCompanyInput = document.getElementById('jobCompany');
+    if (jobCompanyInput) {
+        jobCompanyInput.setAttribute('maxlength', CHARACTER_LIMITS.jobCompany);
+        jobCompanyInput.addEventListener('input', function() {
+            const counter = this.parentElement.querySelector('.char-counter');
+            if (counter) {
+                validateFieldLength(this, CHARACTER_LIMITS.jobCompany, counter);
+            }
+        });
+    }
+    
+    // Descripción de trabajo
+    const jobDescInput = document.getElementById('jobDescription');
+    if (jobDescInput) {
+        jobDescInput.setAttribute('maxlength', CHARACTER_LIMITS.jobDescription);
+        jobDescInput.addEventListener('input', function() {
+            const counter = this.parentElement.querySelector('.char-counter');
+            if (counter) {
+                validateFieldLength(this, CHARACTER_LIMITS.jobDescription, counter);
+            }
+        });
+    }
+    
+    // Input de mensajes de chat
+    const chatInput = document.getElementById('chatInput');
+    if (chatInput) {
+        chatInput.setAttribute('maxlength', CHARACTER_LIMITS.message);
+        chatInput.addEventListener('input', function() {
+            const counter = document.getElementById('chatCharCounter');
+            if (counter) {
+                validateFieldLength(this, CHARACTER_LIMITS.message, counter);
+            }
+        });
+    }
+}
+
+// Validar antes de enviar formularios
+function validateFormBeforeSubmit() {
+    const inputs = document.querySelectorAll('input.input-error, textarea.input-error');
+    if (inputs.length > 0) {
+        alert('Por favor corrige los campos que exceden el límite de caracteres (marcados en rojo).');
+        return false;
+    }
+    return true;
+}
+
+// Modificar función de registro para validar límites
+const originalRegister = window.register;
+window.register = async function(e) {
+    e.preventDefault();
+    
+    if (!validateFormBeforeSubmit()) {
+        return;
+    }
+    
+    return originalRegister.call(this, e);
+};
+
+// Modificar función de login para validar límites
+const originalLogin = window.login;
+window.login = async function(e) {
+    e.preventDefault();
+    
+    if (!validateFormBeforeSubmit()) {
+        return;
+    }
+    
+    return originalLogin.call(this, e);
+};
+
+// Modificar función addJob para validar límites
+const originalAddJob = window.addJob;
+window.addJob = async function(e) {
+    e.preventDefault();
+    
+    if (!validateFormBeforeSubmit()) {
+        return;
+    }
+    
+    return originalAddJob.call(this, e);
+};
+
+// Modificar función sendMessage para validar límites
+const originalSendMessage = window.sendMessage;
+window.sendMessage = async function() {
+    const chatInput = document.getElementById('chatInput');
+    const messageText = chatInput.value.trim();
+    
+    if (messageText.length > CHARACTER_LIMITS.message) {
+        alert(`El mensaje no puede exceder ${CHARACTER_LIMITS.message} caracteres.`);
+        return;
+    }
+    
+    if (messageText.length === 0) {
+        return;
+    }
+    
+    return originalSendMessage.call(this);
+};
+
+// Inicializar cuando el DOM esté listo
+document.addEventListener('DOMContentLoaded', function() {
+    // Esperar un poco para que los elementos estén en el DOM
+    setTimeout(() => {
+        initializeFieldValidators();
+    }, 500);
+});
+
+// Re-inicializar validadores cuando se cambia de pantalla
+const originalShowRegister = window.showRegister;
+window.showRegister = function(type) {
+    originalShowRegister.call(this, type);
+    setTimeout(() => {
+        initializeFieldValidators();
+    }, 100);
+};
+
+const originalShowAddJob = window.showAddJob;
+window.showAddJob = function() {
+    originalShowAddJob.call(this);
+    setTimeout(() => {
+        initializeFieldValidators();
+    }, 100);
+};
+
+const originalShowChats = window.showChats;
+window.showChats = function() {
+    originalShowChats.call(this);
+    setTimeout(() => {
+        initializeFieldValidators();
+    }, 100);
+};

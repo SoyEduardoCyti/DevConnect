@@ -1117,3 +1117,108 @@ textarea.form-control {
     position: relative;
 }
 
+/* Contador de caracteres en labels */
+.form-label {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+    font-weight: 500;
+    color: var(--gray-700);
+}
+
+.char-counter {
+    font-size: 0.75rem;
+    font-weight: 400;
+    color: var(--gray-500);
+    margin-left: auto;
+    padding-left: 0.5rem;
+    transition: var(--transition);
+}
+
+/* Advertencia cuando quedan pocos caracteres */
+.char-counter.limit-warning {
+    color: var(--warning);
+    font-weight: 600;
+}
+
+/* Error cuando se excede el límite */
+.char-counter.limit-exceeded {
+    color: var(--error);
+    font-weight: 700;
+    animation: pulse 0.5s ease-in-out;
+}
+
+/* Estilo para inputs con error */
+.input-error {
+    border-color: var(--error) !important;
+    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1) !important;
+}
+
+.input-error:focus {
+    border-color: var(--error) !important;
+    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.2) !important;
+}
+
+/* Contador inline para el chat */
+.char-counter-inline {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 0.7rem;
+    color: var(--gray-400);
+    pointer-events: none;
+    transition: var(--transition);
+}
+
+.char-counter-inline.limit-warning {
+    color: var(--warning);
+    font-weight: 600;
+}
+
+.char-counter-inline.limit-exceeded {
+    color: var(--error);
+    font-weight: 700;
+}
+
+/* Ajustar padding del input de chat para el contador */
+.message-input input {
+    padding-right: 55px;
+}
+
+/* Animación de pulso para errores */
+@keyframes pulse {
+    0%, 100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.1);
+    }
+}
+
+/* Tooltip de ayuda */
+.char-limit-help {
+    font-size: 0.75rem;
+    color: var(--gray-500);
+    margin-top: 0.25rem;
+    font-style: italic;
+}
+
+/* Estilo para textarea con contador */
+textarea.form-control {
+    resize: vertical;
+    min-height: 100px;
+}
+
+/* Responsive - ocultar contadores en móvil si es necesario */
+@media (max-width: 480px) {
+    .char-counter {
+        font-size: 0.7rem;
+    }
+    
+    .char-counter-inline {
+        font-size: 0.65rem;
+        right: 8px;
+    }
+}
