@@ -94,26 +94,25 @@
                         </div>
                         
                         <form onsubmit="login(event)" autocomplete="on">
+                                        <!-- ======LOGIN ========= -->
                             <div class="form-group">
-                                <label class="form-label" for="loginUsername">
-                                    Usuario
-                                    <span class="char-counter">0/12</span>
-                                </label>
-                                <input class="form-control" id="loginUsername" type="text" required maxlength="12" />
+                                <label class="form-label" for="loginUsername">Usuario</label>
+                                <input class="form-control" id="loginUsername" type="text" required />
                             </div>
-
 
                             <div class="form-group">
                                 <label class="form-label" for="loginPassword">Contraseña</label>
                                 <div class="password-input-container">
                                     <input class="form-control" id="loginPassword" type="password" required />
-                                   
                                     <button type="button" class="toggle-password" onclick="togglePasswordVisibility('loginPassword')">
                                         <i class="fas fa-eye"></i>
                                     </button>
-
                                 </div>
                             </div>
+
+
+
+
                             <button type="submit" class="btn btn-primary" id="loginButton" style="width: 100%;">
                                 <span>Entrar</span>
                             </button>
@@ -159,24 +158,29 @@
                         
                         <form id="registerForm" onsubmit="register(event)" autocomplete="on">
                             
+                            <!-- Register Username -->
                             <div class="form-group">
                                 <label class="form-label" for="regUsername">
                                     Nombre de Usuario
-                                    <span class="char-counter">0/12</span>
+                                    <span class="char-counter">0/15</span>
                                 </label>
-                                <input class="form-control" id="regUsername" type="text" required maxlength="12" />
+                                <input class="form-control" id="regUsername" type="text" required maxlength="15" />
                             </div>
                             
+                            <!-- Register Password -->
                             <div class="form-group">
-                                <label class="form-label" for="regPassword">Contraseña</label>
+                                <label class="form-label" for="regPassword">
+                                    Contraseña
+                                    <span class="char-counter password-char-counter">0/15</span>
+                                </label>
                                 <div class="password-input-container">
-                                    <input class="form-control" id="regPassword" type="password" required oninput="checkPasswordStrength()" />
+                                    <input class="form-control" id="regPassword" type="password" required maxlength="15" oninput="checkPasswordStrength()" />
                                     <button type="button" class="toggle-password" onclick="togglePasswordVisibility('regPassword')">
                                         <i class="fas fa-eye"></i>
                                     </button>
                                 </div>
                                 
-                                <div class="password-requirements">
+                            <div class="password-requirements">
                                     <div class="requirement invalid" id="req-length">
                                         <span class="requirement-icon">◉</span>
                                         Mínimo 8 caracteres
@@ -203,11 +207,13 @@
                                     <div class="password-strength-bar"></div>
                                 </div>
                             </div>
+
                             
+                            <!-- Confirm Password -->
                             <div class="form-group confirm-password">
                                 <label class="form-label" for="regConfirmPassword">Confirmar Contraseña</label>
                                 <div class="password-input-container">
-                                    <input class="form-control" id="regConfirmPassword" type="password" required oninput="checkPasswordMatch()" />
+                                    <input class="form-control" id="regConfirmPassword" type="password" required maxlength="15" oninput="checkPasswordMatch()" />
                                     <button type="button" class="toggle-password" onclick="togglePasswordVisibility('regConfirmPassword')">
                                         <i class="fas fa-eye"></i>
                                     </button>
@@ -219,6 +225,7 @@
                             
 
                             
+                            <!-- Register First Name -->
                             <div class="form-group">
                                 <label class="form-label" for="regFirstName">
                                     Nombres
@@ -228,10 +235,15 @@
                             </div>
 
 
+                            <!-- Register Last Name -->
                             <div class="form-group">
-                                <label class="form-label" for="regLastName">Apellidos</label>
-                                <input class="form-control" id="regLastName" type="text" required />
+                                <label class="form-label" for="regLastName">
+                                    Apellidos
+                                    <span class="char-counter">0/35</span>
+                                </label>
+                                <input class="form-control" id="regLastName" type="text" required maxlength="35" />
                             </div>
+
 
 
                             <div class="form-group">
@@ -240,6 +252,7 @@
                             </div>
 
 
+                            <!-- Register Company -->
                             <div id="employerFields" class="form-group hidden">
                                 <label class="form-label" for="regCompany">
                                     Empresa (opcional)
@@ -420,6 +433,7 @@
                         
                         <form id="addJobForm" onsubmit="addJob(event)">
 
+                            <!-- Job Title -->
                             <div class="form-group">
                                 <label class="form-label" for="jobTitle">
                                     Título
@@ -429,6 +443,7 @@
                             </div>
 
 
+                            <!-- Job Company -->
                             <div class="form-group">
                                 <label class="form-label" for="jobCompany">
                                     Empresa
@@ -438,13 +453,14 @@
                             </div>
 
 
-                            <div class="form-group">
-                                <label class="form-label" for="jobDescription">
-                                    Descripción
-                                    <span class="char-counter">0/500</span>
-                                </label>
-                                <textarea class="form-control" id="jobDescription" rows="3" required maxlength="500"></textarea>
-                            </div>
+                                <!-- Job Description -->
+                                <div class="form-group">
+                                    <label class="form-label" for="jobDescription">
+                                        Descripción
+                                        <span class="char-counter">0/500</span>
+                                    </label>
+                                    <textarea class="form-control" id="jobDescription" rows="3" required maxlength="500"></textarea>
+                                </div>
 
 
                             <div class="form-group">
@@ -507,13 +523,12 @@
                                 <div class="chat-header">
                                     <h3 id="currentChatTitle">Selecciona una conversación</h3>
                                 </div>
-                                    <div class="message-input">
-                                        <div style="flex: 1; position: relative;">
-                                            <input type="text" id="chatInput" placeholder="Escribe un mensaje..." maxlength="500" onkeypress="if(event.key==='Enter'){sendMessage();}" />
-                                            <span id="chatCharCounter" class="char-counter-inline">0/500</span>
-                                        </div>
+                                    <div class="chat-messages" id="chatMessages"></div>
+                                        <div class="message-input">
+                                        <input type="text" id="chatInput" placeholder="Escribe un mensaje..." onkeypress="if(event.key==='Enter'){sendMessage();}" />
                                         <button onclick="sendMessage()">Enviar</button>
                                     </div>
+
                             </div>
                         </div>
                     </div>

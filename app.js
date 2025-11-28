@@ -1786,17 +1786,47 @@ document.addEventListener('click', function(e) {
 // AGREGAR AL FINAL DE app.js
 // ============================================
 
+// ============================================
+// SISTEMA DE LÍMITES Y ANTI FUERZA BRUTA
+// AGREGAR AL FINAL DE app.js
+// ============================================
+
 // Límites de caracteres
 const CHARACTER_LIMITS = {
-    username: 12,
+    username: 15,
+    password: 15,
     firstName: 35,
     lastName: 35,
     company: 50,
     jobTitle: 100,
     jobCompany: 50,
-    jobDescription: 500,
-    message: 500
+    jobDescription: 500
 };
+
+// Control de intentos de login fallidos
+let loginAttempts = 0;
+let loginBlockedUntil = null;
+
+// Recuperar intentos guardados
+(function initLoginAttempts() {
+    const savedAttempts = localStorage.getItem('devconnect_login_attempts');
+    const savedBlockedUntil = localStorage.getItem('devconnect_blocked_until');
+    
+    if (savedAttempts) {
+        loginAttempts = parseInt(savedAttempts);
+    }
+    
+    if (savedBlockedUntil) {
+        const blockedTime = new Date(savedBlockedUntil);
+        if (blockedTime > new Date()) {
+            loginBlockedUntil = blockedTime;
+        } else {
+            localStorage.removeItem('devconnect_blocked_until');
+            localStorage.removeItem('devconnect_login_attempts');
+            loginAttempts = 0;
+        }
+    }
+})();
 
 // Función para validar longitud de campo
 function validateFieldLength(input, maxLength, counterElement) {
@@ -1823,36 +1853,45 @@ function validateFieldLength(input, maxLength, counterElement) {
     return currentLength <= maxLength;
 }
 
-// Función para truncar texto si excede el límite
-function enforceMaxLength(input, maxLength) {
-    if (input.value.length > maxLength) {
-        input.value = input.value.substring(0, maxLength);
-    }
-}
-
-// Inicializar validadores de campos
+// Inicializar validadores
 function initializeFieldValidators() {
-    // Username
-    const usernameInputs = ['loginUsername', 'regUsername'];
-    usernameInputs.forEach(id => {
-        const input = document.getElementById(id);
-        if (input) {
-            input.setAttribute('maxlength', CHARACTER_LIMITS.username);
-            input.addEventListener('input', function() {
-                const counter = this.parentElement.querySelector('.char-counter');
-                if (counter) {
-                    validateFieldLength(this, CHARACTER_LIMITS.username, counter);
-                }
+    // Username - solo registro
+    const regUsername = document.getElementById('regUsername');
+    if (regUsername) {
+        regUsername.setAttribute('maxlength', CHARACTER_LIMITS.username);
+        regUsername.addEventListener('input', function() {
+            const counter = this.nextElementSibling;
+            if (counter && counter.classList.contains('char-counter')) {
+                validateFieldLength(this, CHARACTER_LIMITS.username, counter);
+            }
+        });
+    }
+    
+    // Password - solo registro
+    const regPassword = document.getElementById('regPassword');
+    if (regPassword) {
+        regPassword.setAttribute('maxlength', CHARACTER_LIMITS.password);
+        const passwordGroup = regPassword.closest('.form-group');
+        const counter = passwordGroup ? passwordGroup.querySelector('.password-char-counter') : null;
+        if (counter) {
+            regPassword.addEventListener('input', function() {
+                validateFieldLength(this, CHARACTER_LIMITS.password, counter);
             });
         }
-    });
+    }
+    
+    const regConfirmPassword = document.getElementById('regConfirmPassword');
+    if (regConfirmPassword) {
+        regConfirmPassword.setAttribute('maxlength', CHARACTER_LIMITS.password);
+    }
     
     // Nombres
-    const firstNameInput = document.getElementById('regFirstName');
-    if (firstNameInput) {
-        firstNameInput.setAttribute('maxlength', CHARACTER_LIMITS.firstName);
-        firstNameInput.addEventListener('input', function() {
-            const counter = this.parentElement.querySelector('.char-counter');
+    const firstName = document.getElementById('regFirstName');
+    if (firstName) {
+        firstName.setAttribute('maxlength', CHARACTER_LIMITS.firstName);
+        firstName.addEventListener('input', function() {
+            const label = this.previousElementSibling;
+            const counter = label ? label.querySelector('.char-counter') : null;
             if (counter) {
                 validateFieldLength(this, CHARACTER_LIMITS.firstName, counter);
             }
@@ -1860,11 +1899,12 @@ function initializeFieldValidators() {
     }
     
     // Apellidos
-    const lastNameInput = document.getElementById('regLastName');
-    if (lastNameInput) {
-        lastNameInput.setAttribute('maxlength', CHARACTER_LIMITS.lastName);
-        lastNameInput.addEventListener('input', function() {
-            const counter = this.parentElement.querySelector('.char-counter');
+    const lastName = document.getElementById('regLastName');
+    if (lastName) {
+        lastName.setAttribute('maxlength', CHARACTER_LIMITS.lastName);
+        lastName.addEventListener('input', function() {
+            const label = this.previousElementSibling;
+            const counter = label ? label.querySelector('.char-counter') : null;
             if (counter) {
                 validateFieldLength(this, CHARACTER_LIMITS.lastName, counter);
             }
@@ -1872,11 +1912,12 @@ function initializeFieldValidators() {
     }
     
     // Empresa
-    const companyInput = document.getElementById('regCompany');
-    if (companyInput) {
-        companyInput.setAttribute('maxlength', CHARACTER_LIMITS.company);
-        companyInput.addEventListener('input', function() {
-            const counter = this.parentElement.querySelector('.char-counter');
+    const company = document.getElementById('regCompany');
+    if (company) {
+        company.setAttribute('maxlength', CHARACTER_LIMITS.company);
+        company.addEventListener('input', function() {
+            const label = this.previousElementSibling;
+            const counter = label ? label.querySelector('.char-counter') : null;
             if (counter) {
                 validateFieldLength(this, CHARACTER_LIMITS.company, counter);
             }
@@ -1884,11 +1925,12 @@ function initializeFieldValidators() {
     }
     
     // Título de trabajo
-    const jobTitleInput = document.getElementById('jobTitle');
-    if (jobTitleInput) {
-        jobTitleInput.setAttribute('maxlength', CHARACTER_LIMITS.jobTitle);
-        jobTitleInput.addEventListener('input', function() {
-            const counter = this.parentElement.querySelector('.char-counter');
+    const jobTitle = document.getElementById('jobTitle');
+    if (jobTitle) {
+        jobTitle.setAttribute('maxlength', CHARACTER_LIMITS.jobTitle);
+        jobTitle.addEventListener('input', function() {
+            const label = this.previousElementSibling;
+            const counter = label ? label.querySelector('.char-counter') : null;
             if (counter) {
                 validateFieldLength(this, CHARACTER_LIMITS.jobTitle, counter);
             }
@@ -1896,11 +1938,12 @@ function initializeFieldValidators() {
     }
     
     // Empresa de trabajo
-    const jobCompanyInput = document.getElementById('jobCompany');
-    if (jobCompanyInput) {
-        jobCompanyInput.setAttribute('maxlength', CHARACTER_LIMITS.jobCompany);
-        jobCompanyInput.addEventListener('input', function() {
-            const counter = this.parentElement.querySelector('.char-counter');
+    const jobCompany = document.getElementById('jobCompany');
+    if (jobCompany) {
+        jobCompany.setAttribute('maxlength', CHARACTER_LIMITS.jobCompany);
+        jobCompany.addEventListener('input', function() {
+            const label = this.previousElementSibling;
+            const counter = label ? label.querySelector('.char-counter') : null;
             if (counter) {
                 validateFieldLength(this, CHARACTER_LIMITS.jobCompany, counter);
             }
@@ -1908,123 +1951,157 @@ function initializeFieldValidators() {
     }
     
     // Descripción de trabajo
-    const jobDescInput = document.getElementById('jobDescription');
-    if (jobDescInput) {
-        jobDescInput.setAttribute('maxlength', CHARACTER_LIMITS.jobDescription);
-        jobDescInput.addEventListener('input', function() {
-            const counter = this.parentElement.querySelector('.char-counter');
+    const jobDesc = document.getElementById('jobDescription');
+    if (jobDesc) {
+        jobDesc.setAttribute('maxlength', CHARACTER_LIMITS.jobDescription);
+        jobDesc.addEventListener('input', function() {
+            const label = this.previousElementSibling;
+            const counter = label ? label.querySelector('.char-counter') : null;
             if (counter) {
                 validateFieldLength(this, CHARACTER_LIMITS.jobDescription, counter);
             }
         });
     }
-    
-    // Input de mensajes de chat
-    const chatInput = document.getElementById('chatInput');
-    if (chatInput) {
-        chatInput.setAttribute('maxlength', CHARACTER_LIMITS.message);
-        chatInput.addEventListener('input', function() {
-            const counter = document.getElementById('chatCharCounter');
-            if (counter) {
-                validateFieldLength(this, CHARACTER_LIMITS.message, counter);
-            }
-        });
-    }
 }
 
-// Validar antes de enviar formularios
-function validateFormBeforeSubmit() {
-    const inputs = document.querySelectorAll('input.input-error, textarea.input-error');
-    if (inputs.length > 0) {
+// Validar formularios antes de enviar
+function validateFormFields() {
+    const errorInputs = document.querySelectorAll('input.input-error, textarea.input-error');
+    if (errorInputs.length > 0) {
         alert('Por favor corrige los campos que exceden el límite de caracteres (marcados en rojo).');
         return false;
     }
     return true;
 }
 
-// Modificar función de registro para validar límites
-const originalRegister = window.register;
-window.register = async function(e) {
+// Sistema anti fuerza bruta
+function checkLoginBlocked() {
+    if (loginBlockedUntil && new Date() < loginBlockedUntil) {
+        const remainingSeconds = Math.ceil((loginBlockedUntil - new Date()) / 1000);
+        const minutes = Math.floor(remainingSeconds / 60);
+        const seconds = remainingSeconds % 60;
+        return `Demasiados intentos fallidos. Intenta de nuevo en ${minutes}:${seconds.toString().padStart(2, '0')}`;
+    }
+    
+    if (loginBlockedUntil && new Date() >= loginBlockedUntil) {
+        loginAttempts = 0;
+        loginBlockedUntil = null;
+        localStorage.removeItem('devconnect_blocked_until');
+        localStorage.removeItem('devconnect_login_attempts');
+    }
+    
+    return null;
+}
+
+function registerFailedLogin() {
+    loginAttempts++;
+    localStorage.setItem('devconnect_login_attempts', loginAttempts.toString());
+    
+    if (loginAttempts >= 5) {
+        loginBlockedUntil = new Date(Date.now() + 2 * 60 * 1000);
+        localStorage.setItem('devconnect_blocked_until', loginBlockedUntil.toISOString());
+        return checkLoginBlocked();
+    }
+    
+    const remaining = 5 - loginAttempts;
+    return `Usuario o contraseña incorrectos. Te quedan ${remaining} ${remaining === 1 ? 'intento' : 'intentos'}.`;
+}
+
+function resetLoginAttempts() {
+    loginAttempts = 0;
+    loginBlockedUntil = null;
+    localStorage.removeItem('devconnect_blocked_until');
+    localStorage.removeItem('devconnect_login_attempts');
+}
+
+// Sobrescribir login original
+const _originalLogin = login;
+login = async function(e) {
     e.preventDefault();
     
-    if (!validateFormBeforeSubmit()) {
+    const blockedMessage = checkLoginBlocked();
+    if (blockedMessage) {
+        alert(blockedMessage);
         return;
     }
     
-    return originalRegister.call(this, e);
+    const username = document.getElementById('loginUsername').value;
+    const password = document.getElementById('loginPassword').value;
+    const loginButton = document.getElementById('loginButton');
+    
+    loginButton.setAttribute('data-original-text', loginButton.textContent);
+    setLoading(loginButton, true);
+    
+    try {
+        const hashedPassword = await hashPassword(password);
+        
+        const { data: userData, error: userError } = await supabase
+            .from('usuarios')
+            .select('*')
+            .eq('username', username)
+            .eq('password_hash', hashedPassword)
+            .eq('activo', 1)
+            .single();
+        
+        if (userError || !userData) {
+            const errorMessage = registerFailedLogin();
+            throw new Error(errorMessage);
+        }
+        
+        resetLoginAttempts();
+        
+        currentUser = userData;
+        isAuthenticated = true;
+        
+        localStorage.setItem('devconnect_user', JSON.stringify(currentUser));
+        
+        showAuthenticatedUI();
+    } catch (error) {
+        alert(error.message);
+    } finally {
+        setLoading(loginButton, false);
+    }
 };
 
-// Modificar función de login para validar límites
-const originalLogin = window.login;
-window.login = async function(e) {
+// Sobrescribir register original
+const _originalRegister = register;
+register = async function(e) {
     e.preventDefault();
     
-    if (!validateFormBeforeSubmit()) {
+    if (!validateFormFields()) {
         return;
     }
     
-    return originalLogin.call(this, e);
+    return _originalRegister.call(this, e);
 };
 
-// Modificar función addJob para validar límites
-const originalAddJob = window.addJob;
-window.addJob = async function(e) {
+// Sobrescribir addJob original
+const _originalAddJob = addJob;
+addJob = async function(e) {
     e.preventDefault();
     
-    if (!validateFormBeforeSubmit()) {
+    if (!validateFormFields()) {
         return;
     }
     
-    return originalAddJob.call(this, e);
+    return _originalAddJob.call(this, e);
 };
 
-// Modificar función sendMessage para validar límites
-const originalSendMessage = window.sendMessage;
-window.sendMessage = async function() {
-    const chatInput = document.getElementById('chatInput');
-    const messageText = chatInput.value.trim();
-    
-    if (messageText.length > CHARACTER_LIMITS.message) {
-        alert(`El mensaje no puede exceder ${CHARACTER_LIMITS.message} caracteres.`);
-        return;
-    }
-    
-    if (messageText.length === 0) {
-        return;
-    }
-    
-    return originalSendMessage.call(this);
+// Sobrescribir showRegister
+const _originalShowRegister = showRegister;
+showRegister = function(type) {
+    _originalShowRegister.call(this, type);
+    setTimeout(() => initializeFieldValidators(), 100);
 };
 
-// Inicializar cuando el DOM esté listo
+// Sobrescribir showAddJob
+const _originalShowAddJob = showAddJob;
+showAddJob = function() {
+    _originalShowAddJob.call(this);
+    setTimeout(() => initializeFieldValidators(), 100);
+};
+
+// Inicializar al cargar
 document.addEventListener('DOMContentLoaded', function() {
-    // Esperar un poco para que los elementos estén en el DOM
-    setTimeout(() => {
-        initializeFieldValidators();
-    }, 500);
+    setTimeout(() => initializeFieldValidators(), 500);
 });
-
-// Re-inicializar validadores cuando se cambia de pantalla
-const originalShowRegister = window.showRegister;
-window.showRegister = function(type) {
-    originalShowRegister.call(this, type);
-    setTimeout(() => {
-        initializeFieldValidators();
-    }, 100);
-};
-
-const originalShowAddJob = window.showAddJob;
-window.showAddJob = function() {
-    originalShowAddJob.call(this);
-    setTimeout(() => {
-        initializeFieldValidators();
-    }, 100);
-};
-
-const originalShowChats = window.showChats;
-window.showChats = function() {
-    originalShowChats.call(this);
-    setTimeout(() => {
-        initializeFieldValidators();
-    }, 100);
-};
