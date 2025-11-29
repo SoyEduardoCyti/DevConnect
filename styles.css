@@ -952,13 +952,24 @@ textarea.form-control {
 }
 
 /* Centrar y limitar ancho de los formularios de login/registro */
-#loginScreen,
-#registerScreen {
+/* Centrar y limitar ancho de los formularios de login/registro */
+
+/* LOGIN - Centrado fijo */
+#loginScreen {
     display: flex;
     align-items: center;
     justify-content: center;
     padding: 2rem;
-    min-height: calc(100vh - var(--header-height));
+    min-height: 100%;
+    box-sizing: border-box;
+}
+
+/* REGISTRO - Con scroll normal */
+#registerScreen {
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 2rem;
     box-sizing: border-box;
 }
 
