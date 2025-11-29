@@ -3,10 +3,6 @@
     margin: 0;
     padding: 0;
 }
-body {
-    margin: 0;
-    padding: 0;
-}
 
 :root {
     --primary: #4361ee;
@@ -57,7 +53,6 @@ html, body {
     width: var(--sidebar-width);
     background: linear-gradient(180deg, var(--primary) 0%, var(--secondary) 100%);
     color: white;
-    padding: 2rem 1.5rem;
     display: flex;
     flex-direction: column;
     box-shadow: 4px 0 20px rgba(0, 0, 0, 0.1);
@@ -66,7 +61,7 @@ html, body {
     left: 0;
     top: 0;
     bottom: 0;
-    overflow-y: auto;
+    overflow: hidden;
 }
 
 .logo {
@@ -76,6 +71,8 @@ html, body {
     margin-bottom: 2.5rem;
     font-size: 1.5rem;
     font-weight: 700;
+    padding: 2rem 1.5rem 0;
+    flex-shrink: 0;
 }
 
 .logo i {
@@ -88,6 +85,9 @@ html, body {
     flex-direction: column;
     gap: 0.5rem;
     flex: 1;
+    overflow-y: auto;
+    padding: 0 1.5rem;
+    min-height: 0;
 }
 
 .nav-item {
@@ -117,9 +117,11 @@ html, body {
 }
 
 .user-section {
-    margin-top: auto;
-    padding-top: 1.5rem;
+    margin-top: 0;
+    padding: 1.5rem;
     border-top: 1px solid rgba(255, 255, 255, 0.1);
+    flex-shrink: 0;
+    background: linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.05) 100%);
 }
 
 .user-info {
@@ -180,7 +182,12 @@ html, body {
     display: flex;
     flex-direction: column;
     overflow: hidden;
+}
+
+/* Solo aplicar margen cuando el sidebar NO está hidden */
+.sidebar:not(.hidden) ~ .main-content {
     margin-left: var(--sidebar-width);
+    width: calc(100% - var(--sidebar-width));
 }
 
 .header {
@@ -546,7 +553,9 @@ html, body {
 }
 
 .form-label {
-    display: block;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
     margin-bottom: 0.5rem;
     font-weight: 500;
     color: var(--gray-700);
@@ -762,6 +771,7 @@ textarea.form-control {
     cursor: pointer;
     transition: var(--transition);
     margin-bottom: 0.5rem;
+    position: relative;
 }
 
 .chat-item:hover {
@@ -835,11 +845,26 @@ textarea.form-control {
     align-self: flex-start;
 }
 
-.message small {
-    display: block;
-    font-size: 0.75rem;
+.message.user .message-content {
+    background: var(--primary);
+    color: white;
+    border-bottom-right-radius: 4px;
+}
+
+.message.other .message-content {
+    background: var(--gray-100);
+    color: var(--gray-800);
+    border-bottom-left-radius: 4px;
+}
+
+.message-time {
+    font-size: 0.7rem;
     opacity: 0.7;
-    margin-top: 0.25rem;
+    align-self: flex-end;
+}
+
+.message.other .message-time {
+    align-self: flex-start;
 }
 
 .message-input {
@@ -847,11 +872,13 @@ textarea.form-control {
     gap: 0.75rem;
     padding: 1rem 1.5rem;
     border-top: 1px solid var(--gray-200);
+    position: relative;
 }
 
 .message-input input {
     flex: 1;
     padding: 0.75rem 1rem;
+    padding-right: 55px;
     border-radius: var(--border-radius);
     border: 1px solid var(--gray-300);
     outline: none;
@@ -886,14 +913,6 @@ textarea.form-control {
     align-items: center;
     justify-content: center;
     margin: 1rem 0;
-    gap: 0.75rem;
-}
-
-.message-date-separator {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin: 1rem 0;
 }
 
 .message-date-text {
@@ -904,39 +923,6 @@ textarea.form-control {
     border-radius: 20px;
     font-weight: 500;
     white-space: nowrap;
-}
-
-.message {
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-}
-
-.message-content {
-    padding: 0.75rem 1rem;
-    border-radius: var(--border-radius);
-}
-
-.message.user .message-content {
-    background: var(--primary);
-    color: white;
-    border-bottom-right-radius: 4px;
-}
-
-.message.other .message-content {
-    background: var(--gray-100);
-    color: var(--gray-800);
-    border-bottom-left-radius: 4px;
-}
-
-.message-time {
-    font-size: 0.7rem;
-    opacity: 0.7;
-    align-self: flex-end;
-}
-
-.message.other .message-time {
-    align-self: flex-start;
 }
 
 .loading {
@@ -962,9 +948,6 @@ textarea.form-control {
     from { opacity: 0; transform: translateY(10px); }
     to { opacity: 1; transform: translateY(0); }
 }
-
-/* Centrar y limitar ancho de los formularios de login/registro */
-/* Centrar y limitar ancho de los formularios de login/registro */
 
 /* LOGIN - Centrado fijo */
 #loginScreen {
@@ -1007,31 +990,150 @@ textarea.form-control {
     width: 100%;
 }
 
-    /* Responsive styles */
-    @media (max-width: 1024px) {
-        .grid-cols-3 {
-            grid-template-columns: repeat(2, 1fr);
-        }
+/* Badge para mensajes no leídos */
+.badge {
+    background: var(--error);
+    color: white;
+    border-radius: 50%;
+    min-width: 20px;
+    height: 20px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.7rem;
+    font-weight: 700;
+    margin-left: auto;
+    padding: 0 6px;
+}
+
+.badge.hidden {
+    display: none !important;
+}
+
+/* Badge en cada chat individual */
+.chat-badge {
+    background: var(--error);
+    color: white;
+    border-radius: 50%;
+    min-width: 22px;
+    height: 22px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 0 6px;
+    flex-shrink: 0;
+    margin-left: 8px;
+}
+
+/* Contador de caracteres en labels */
+.char-counter {
+    font-size: 0.75rem;
+    font-weight: 400;
+    color: var(--gray-500);
+    margin-left: auto;
+    padding-left: 0.5rem;
+    transition: var(--transition);
+}
+
+.char-counter.limit-warning {
+    color: var(--warning);
+    font-weight: 600;
+}
+
+.char-counter.limit-exceeded {
+    color: var(--error);
+    font-weight: 700;
+    animation: pulse 0.5s ease-in-out;
+}
+
+.input-error {
+    border-color: var(--error) !important;
+    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1) !important;
+}
+
+.input-error:focus {
+    border-color: var(--error) !important;
+    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.2) !important;
+}
+
+.char-counter-inline {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 0.7rem;
+    color: var(--gray-400);
+    pointer-events: none;
+    transition: var(--transition);
+}
+
+.char-counter-inline.limit-warning {
+    color: var(--warning);
+    font-weight: 600;
+}
+
+.char-counter-inline.limit-exceeded {
+    color: var(--error);
+    font-weight: 700;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.1);
+    }
+}
+
+.char-limit-help {
+    font-size: 0.75rem;
+    color: var(--gray-500);
+    margin-top: 0.25rem;
+    font-style: italic;
+}
+
+/* Responsive styles */
+@media (max-width: 1024px) {
+    .grid-cols-3 {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 768px) {
+    .app-container {
+        flex-direction: column;
     }
 
-    @media (max-width: 768px) {
-        .app-container {
-            flex-direction: column;
-        }
-    
     .sidebar {
         width: 100%;
         height: auto;
-        padding: 1rem;
         position: relative;
         left: auto;
         top: auto;
         bottom: auto;
     }
-    
-    .main-content {
-        margin-left: 0;
+
+    .logo {
+        padding: 1rem 1.5rem 0;
+        margin-bottom: 1rem;
     }
+
+    .nav-menu {
+        padding: 0 1rem;
+    }
+
+    .user-section {
+        padding: 1rem 1.5rem;
+    }
+
+    .sidebar:not(.hidden) ~ .main-content {
+        margin-left: 0;
+        width: 100%;
+    }
+    
     .nav-menu {
         flex-direction: row;
         overflow-x: auto;
@@ -1040,11 +1142,6 @@ textarea.form-control {
     
     .nav-item {
         white-space: nowrap;
-    }
-    
-    .user-section {
-        margin-top: 0;
-        padding-top: 1rem;
     }
     
     .mobile-menu-btn {
@@ -1094,155 +1191,7 @@ textarea.form-control {
     .page-title {
         font-size: 1.25rem;
     }
-}
-
-@media (max-width: 420px) {
-    #loginScreen .card,
-    #registerScreen .card {
-        max-width: 100%;
-        margin: 0.5rem;
-    }
-}
-
-
-/* Badge para mensajes no leídos */
-.badge {
-    background: var(--error);
-    color: white;
-    border-radius: 50%;
-    min-width: 20px;
-    height: 20px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 0.7rem;
-    font-weight: 700;
-    margin-left: auto;
-    padding: 0 6px;
-}
-
-.badge.hidden {
-    display: none !important;
-}
-
-/* Badge en cada chat individual */
-.chat-badge {
-    background: var(--error);
-    color: white;
-    border-radius: 50%;
-    min-width: 22px;
-    height: 22px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 0.7rem;
-    font-weight: 700;
-    padding: 0 6px;
-    flex-shrink: 0;
-    margin-left: 8px;
-}
-
-/* Estilo para chat item con badge */
-.chat-item {
-    position: relative;
-}
-
-/* Contador de caracteres en labels */
-.form-label {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 0.5rem;
-    font-weight: 500;
-    color: var(--gray-700);
-}
-
-.char-counter {
-    font-size: 0.75rem;
-    font-weight: 400;
-    color: var(--gray-500);
-    margin-left: auto;
-    padding-left: 0.5rem;
-    transition: var(--transition);
-}
-
-/* Advertencia cuando quedan pocos caracteres */
-.char-counter.limit-warning {
-    color: var(--warning);
-    font-weight: 600;
-}
-
-/* Error cuando se excede el límite */
-.char-counter.limit-exceeded {
-    color: var(--error);
-    font-weight: 700;
-    animation: pulse 0.5s ease-in-out;
-}
-
-/* Estilo para inputs con error */
-.input-error {
-    border-color: var(--error) !important;
-    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1) !important;
-}
-
-.input-error:focus {
-    border-color: var(--error) !important;
-    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.2) !important;
-}
-
-/* Contador inline para el chat */
-.char-counter-inline {
-    position: absolute;
-    right: 10px;
-    top: 50%;
-    transform: translateY(-50%);
-    font-size: 0.7rem;
-    color: var(--gray-400);
-    pointer-events: none;
-    transition: var(--transition);
-}
-
-.char-counter-inline.limit-warning {
-    color: var(--warning);
-    font-weight: 600;
-}
-
-.char-counter-inline.limit-exceeded {
-    color: var(--error);
-    font-weight: 700;
-}
-
-/* Ajustar padding del input de chat para el contador */
-.message-input input {
-    padding-right: 55px;
-}
-
-/* Animación de pulso para errores */
-@keyframes pulse {
-    0%, 100% {
-        transform: scale(1);
-    }
-    50% {
-        transform: scale(1.1);
-    }
-}
-
-/* Tooltip de ayuda */
-.char-limit-help {
-    font-size: 0.75rem;
-    color: var(--gray-500);
-    margin-top: 0.25rem;
-    font-style: italic;
-}
-
-/* Estilo para textarea con contador */
-textarea.form-control {
-    resize: vertical;
-    min-height: 100px;
-}
-
-/* Responsive - ocultar contadores en móvil si es necesario */
-@media (max-width: 480px) {
+    
     .char-counter {
         font-size: 0.7rem;
     }
@@ -1250,5 +1199,13 @@ textarea.form-control {
     .char-counter-inline {
         font-size: 0.65rem;
         right: 8px;
+    }
+}
+
+@media (max-width: 420px) {
+    #loginScreen .card,
+    #registerScreen .card {
+        max-width: 100%;
+        margin: 0.5rem;
     }
 }
