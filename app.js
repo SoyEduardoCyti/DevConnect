@@ -1853,20 +1853,22 @@ function validateFieldLength(input, maxLength, counterElement) {
     return currentLength <= maxLength;
 }
 
-        // Inicializar validadores
-        function initializeFieldValidators() {
-            // Username - solo registro
-            const regUsername = document.getElementById('regUsername');
-            if (regUsername) {
-                regUsername.setAttribute('maxlength', CHARACTER_LIMITS.username);
-                regUsername.addEventListener('input', function() {
-                    const label = this.previousElementSibling;
-                    const counter = label ? label.querySelector('.char-counter') : null;
-                    if (counter) {
-                        validateFieldLength(this, CHARACTER_LIMITS.username, counter);
-                    }
-                });
-            }
+// Inicializar validadores de campos
+function initializeFieldValidators() {
+    // Username
+    const usernameInputs = ['loginUsername', 'regUsername'];
+    usernameInputs.forEach(id => {
+        const input = document.getElementById(id);
+        if (input) {
+            input.setAttribute('maxlength', CHARACTER_LIMITS.username);
+            input.addEventListener('input', function() {
+                const counter = this.parentElement.querySelector('.char-counter');
+                if (counter) {
+                    validateFieldLength(this, CHARACTER_LIMITS.username, counter);
+                }
+            });
+        }
+    });
     
     // Password - solo registro
     const regPassword = document.getElementById('regPassword');
