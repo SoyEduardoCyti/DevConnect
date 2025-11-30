@@ -1489,7 +1489,7 @@ function displayChatList(chatList, conversations) {
             (chat.lastMessage.length > 30 ? 
                 chat.lastMessage.substring(0, 30) + '...' : 
                 chat.lastMessage) : 
-            'No hay mensajes aún';
+            '';
         
         const time = chat.lastMessageDate ? formatTime(chat.lastMessageDate) : '';
         
@@ -1602,7 +1602,7 @@ function displayMessages(div, messages) {
     div.innerHTML = '';
     
     if (!messages || messages.length === 0) {
-        div.innerHTML = '<p>No hay mensajes en esta conversación.</p>';
+        div.innerHTML = '<p></p>';
         return;
     }
     
